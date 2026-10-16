@@ -32,10 +32,17 @@ public class OverlayRenderer {
         var guiGraphics = event.getGuiGraphics();
         float partialTick = event.getPartialTick();
 
-        for (AbstractShaderOverlay overlay : REGISTERED_OVERLAYS) {
-            if (overlay.isActive()) {
-                overlay.render(guiGraphics, partialTick, (int) mouseX, (int) mouseY, width, height);
+        var pose = guiGraphics.pose();
+        pose.pushPose();
+        pose.translate(0.0F, 0.0F, 500.0F);
+        try {
+            for (AbstractShaderOverlay overlay : REGISTERED_OVERLAYS) {
+                if (overlay.isActive()) {
+                    overlay.render(guiGraphics, partialTick, (int) mouseX, (int) mouseY, width, height);
+                }
             }
+        } finally {
+            pose.popPose();
         }
     }
 }

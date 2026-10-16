@@ -41,6 +41,7 @@ tasks.named<Javadoc>("javadoc") {
 }
 
 tasks.named<Jar>("sourcesJar") {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     dependsOn(configurations.getByName("commonJava"))
     from(configurations.getByName("commonJava"))
     dependsOn(configurations.getByName("commonResources"))

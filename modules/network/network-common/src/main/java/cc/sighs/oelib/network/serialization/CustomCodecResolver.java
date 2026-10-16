@@ -6,6 +6,7 @@ import cc.sighs.oelib.network.util.ReflectionUtil;
 import cc.sighs.oelib.platform.Platform;
 import com.mojang.serialization.Codec;
 import io.netty.buffer.ByteBuf;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -222,6 +223,9 @@ final class CustomCodecResolver {
                         registry = server.registryAccess().registryOrThrow(key);
                     }
                 }
+                if (registry == null && Platform.isClient()) {
+                    registry = ClientRegistries.find(key);
+                }
                 if (registry == null) {
                     throw new IllegalStateException("Could not find registry: " + regId);
                 }
@@ -312,6 +316,13 @@ final class CustomCodecResolver {
                     recordClass.getSimpleName(), holder.getSimpleName());
         }
         return best;
+    }
+
+    private static final class ClientRegistries {
+        private static Registry<?> find(ResourceKey<? extends Registry<?>> key) {
+            var connection = Minecraft.getInstance().getConnection();
+            return connection == null ? null : connection.registryAccess().registryOrThrow(key);
+        }
     }
 
     private record CodecCacheKey(Class<?> holder, Type componentType) {

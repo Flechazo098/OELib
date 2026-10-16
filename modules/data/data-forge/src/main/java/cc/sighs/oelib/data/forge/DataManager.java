@@ -249,7 +249,7 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
             syncToAllPlayers();
         }
 
-        MinecraftForge.EVENT_BUS.post(new DataReloadEvent(dataClass, validCount + deferredCount, invalidCount));
+        MinecraftForge.EVENT_BUS.post(new DataReloadEvent(dataClass, validCount, invalidCount));
     }
 
     protected void buildCache(T data) {
