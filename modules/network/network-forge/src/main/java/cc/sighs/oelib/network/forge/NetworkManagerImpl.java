@@ -19,6 +19,7 @@ import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,7 +64,12 @@ public class NetworkManagerImpl implements INetworkManager {
         }
         registered = true;
         NetworkManagerImpl impl = new NetworkManagerImpl();
-        for (Class<? extends INetworkPacket<?>> packetClass : NetworkAutoRegistration.findAllAnnotatedPackets()) {
+        for (Class<? extends INetworkPacket<?>> packetClass : NetworkAutoRegistration.findAllAnnotatedPackets().stream()
+                .sorted(Comparator.comparing(clazz -> {
+                    var metadata = clazz.getAnnotation(NetworkPacket.class);
+                    return metadata.modId() + ":" + metadata.id();
+                }))
+                .toList()) {
             impl.registerAnnotated(packetClass);
         }
     }
@@ -155,7 +161,7 @@ public class NetworkManagerImpl implements INetworkManager {
     public <T extends INetworkPacket<T> & CustomPacketPayload> void sendToNearExcept(T packet, ServerLevel level, Vec3 pos, double radius, ServerPlayer excluded) {
         var ch = TYPE_TO_CLIENTBOUND_CHANNEL.get(NetworkPacketTypes.typeOf(packet.getClass()));
         if (ch != null) {
-            ch.send(PacketDistributor.NEAR.with(PacketDistributor.TargetPoint.p(pos.x, pos.y, pos.z, radius, level.dimension())), packet);
+            ch.send(PacketDistributor.NEAR.with(() -> new PacketDistributor.TargetPoint(excluded, pos.x, pos.y, pos.z, radius, level.dimension())), packet);
         }
     }
 

@@ -19,17 +19,17 @@ public final class TickBridge {
 
     private static void onServerTick(TickEvent.ServerTickEvent e) {
         if (e.phase == TickEvent.Phase.START) {
-            EventBus.post(new cc.sighs.oelib.event.events.ServerTickEvent.Pre(() -> true, e.getServer()));
+            EventBus.post(new cc.sighs.oelib.event.events.ServerTickEvent.Pre(e::haveTime, e.getServer()));
         } else {
-            EventBus.post(new cc.sighs.oelib.event.events.ServerTickEvent.Post(() -> true, e.getServer()));
+            EventBus.post(new cc.sighs.oelib.event.events.ServerTickEvent.Post(e::haveTime, e.getServer()));
         }
     }
 
     private static void onLevelTick(TickEvent.LevelTickEvent e) {
         if (e.phase == TickEvent.Phase.START) {
-            EventBus.post(new cc.sighs.oelib.event.events.LevelTickEvent.Pre(() -> true, e.level));
+            EventBus.post(new cc.sighs.oelib.event.events.LevelTickEvent.Pre(e::haveTime, e.level));
         } else {
-            EventBus.post(new cc.sighs.oelib.event.events.LevelTickEvent.Post(() -> true, e.level));
+            EventBus.post(new cc.sighs.oelib.event.events.LevelTickEvent.Post(e::haveTime, e.level));
         }
     }
 

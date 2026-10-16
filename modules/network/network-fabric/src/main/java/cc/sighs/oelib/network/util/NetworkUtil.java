@@ -3,6 +3,7 @@ package cc.sighs.oelib.network.util;
 import cc.sighs.oelib.network.OELibNetwork;
 import cc.sighs.oelib.network.api.CustomPacketPayload;
 import cc.sighs.oelib.network.api.INetworkPacket;
+import cc.sighs.oelib.network.api.NetworkPacket;
 import cc.sighs.oelib.network.chunk.GenericChunkPacket;
 import cc.sighs.oelib.network.codec.StreamCodec;
 import io.netty.buffer.Unpooled;
@@ -91,8 +92,8 @@ public final class NetworkUtil {
     }
 
     public static void forEachChunk(byte[] data, ResourceLocation typeId, int chunkSize, Consumer<GenericChunkPacket> consumer) {
+        int totalChunks = validateChunkPlan(data, typeId, chunkSize);
         var sessionId = UUID.randomUUID();
-        int totalChunks = (int) Math.ceil((double) data.length / chunkSize);
         for (int i = 0; i < totalChunks; i++) {
             int start = i * chunkSize;
             int end = Math.min(start + chunkSize, data.length);
@@ -100,6 +101,24 @@ public final class NetworkUtil {
             GenericChunkPacket chunk = new GenericChunkPacket(sessionId, data.length, (short) i, (short) totalChunks, typeId, chunkData);
             consumer.accept(chunk);
         }
+    }
+
+    private static int validateChunkPlan(byte[] data, ResourceLocation typeId, int chunkSize) {
+        if (chunkSize < NetworkPacket.MIN_CHUNK_SIZE || chunkSize > NetworkPacket.MAX_CLIENTBOUND_CHUNK_SIZE) {
+            throw new IllegalArgumentException("Invalid chunk size " + chunkSize + " for packet " + typeId
+                    + "; expected " + NetworkPacket.MIN_CHUNK_SIZE + ".." + NetworkPacket.MAX_CLIENTBOUND_CHUNK_SIZE + " bytes");
+        }
+        if (data.length <= 0 || data.length > NetworkPacket.MAX_CHUNKED_PACKET_SIZE) {
+            throw new IllegalArgumentException("Invalid chunked payload size " + data.length + " for packet " + typeId
+                    + "; maximum is " + NetworkPacket.MAX_CHUNKED_PACKET_SIZE + " bytes");
+        }
+
+        long totalChunks = (data.length + (long) chunkSize - 1L) / chunkSize;
+        if (totalChunks > NetworkPacket.MAX_CHUNK_COUNT) {
+            throw new IllegalArgumentException("Refusing to split packet " + typeId + " into " + totalChunks
+                    + " chunks; maximum is " + NetworkPacket.MAX_CHUNK_COUNT);
+        }
+        return (int) totalChunks;
     }
 
     public record PacketInfo<T extends INetworkPacket<T> & CustomPacketPayload>(

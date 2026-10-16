@@ -126,16 +126,7 @@ public class NetworkManagerImpl implements INetworkManager {
         var players = PlayerLookup.all(server);
         if (players.isEmpty()) return;
         if (threshold > 0) {
-            @SuppressWarnings("unchecked")
-            NetworkUtil.PacketInfo<T> info = (NetworkUtil.PacketInfo<T>) registeredPackets.get(NetworkPacketTypes.typeOf(packet.getClass()));
-            if (info == null) return;
-            var buf = NetworkUtil.createBufferFromFirstPlayer(players);
-            try {
-                byte[] data = NetworkUtil.encodePacket(packet, info, buf);
-                NetworkUtil.sendChunkedPacketToAll(data, info.type().id(), threshold);
-            } finally {
-                buf.release();
-            }
+            sendWithChunking(packet, players, threshold);
         } else {
             @SuppressWarnings("unchecked")
             NetworkUtil.PacketInfo<T> info = (NetworkUtil.PacketInfo<T>) registeredPackets.get(NetworkPacketTypes.typeOf(packet.getClass()));

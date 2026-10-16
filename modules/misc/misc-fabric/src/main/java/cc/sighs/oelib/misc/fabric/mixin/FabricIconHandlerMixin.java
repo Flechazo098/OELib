@@ -45,7 +45,10 @@ public abstract class FabricIconHandlerMixin {
 
         try (InputStream inputStream = Files.newInputStream(path)) {
             NativeImage image = NativeImage.read(Objects.requireNonNull(inputStream));
-            if (image.getHeight() != image.getWidth()) return;
+            if (image.getHeight() != image.getWidth()) {
+                image.close();
+                return;
+            }
             DynamicTexture tex = new DynamicTexture(image);
             cacheModIcon(path, tex);
             cir.setReturnValue(tex);

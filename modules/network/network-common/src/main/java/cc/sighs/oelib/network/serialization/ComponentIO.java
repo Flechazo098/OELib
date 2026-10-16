@@ -382,7 +382,7 @@ final class ComponentIO {
         if (rawType == GameProfile.class)
             return bindStatic(new ComponentPlan(Kind.GAME_PROFILE), "readGameProfileW", GameProfile.class, "writeGameProfileW", GameProfile.class);
         if (rawType == Property.class)
-            return bindStatic(new ComponentPlan(Kind.GAME_PROFILE), "readPropertyW", Property.class, "writePropertyW", Property.class);
+            return bindStatic(new ComponentPlan(Kind.PROPERTY), "readPropertyW", Property.class, "writePropertyW", Property.class);
         if (rawType == PropertyMap.class)
             return bindStatic(new ComponentPlan(Kind.PROPERTY_MAP), "readGameProfileProperties", PropertyMap.class, "writeGameProfileProperties", PropertyMap.class);
 
