@@ -116,7 +116,11 @@ public class DataManager<T> implements SimpleResourceReloadListener<Map<Resource
 
     @Override
     public ResourceLocation getFabricId() {
-        return ResourceLocation.fromNamespaceAndPath(OELibData.MOD_ID, "data_manager_" + dataClass.getSimpleName().toLowerCase());
+        String classPath = dataClass.getName()
+                .toLowerCase(Locale.ROOT)
+                .replace('.', '/')
+                .replace('$', '_');
+        return ResourceLocation.fromNamespaceAndPath(OELibData.MOD_ID, "data_manager/" + classPath);
     }
 
     @Override
@@ -131,8 +135,8 @@ public class DataManager<T> implements SimpleResourceReloadListener<Map<Resource
                     return;
                 }
 
-                try {
-                    JsonElement json = GSON.fromJson(resource.openAsReader(), JsonElement.class);
+                try (var reader = resource.openAsReader()) {
+                    JsonElement json = GSON.fromJson(reader, JsonElement.class);
                     data.put(rl, json);
                 } catch (Exception e) {
                     OELibData.LOGGER.error("Failed to load JSON from {}", rl, e);

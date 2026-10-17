@@ -17,6 +17,7 @@ dependencies {
     })
 
     api("org.mvel:mvel2:2.5.0.Final")
+    include("org.mvel:mvel2:2.5.0.Final")
 }
 
 loom {

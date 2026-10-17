@@ -48,8 +48,6 @@ neoForge {
 
 registerGeneratedResources()
 
-// Optics and its classfile backend are embedded here. Publishing them as
-// runtime dependencies as well would expose the same JPMS modules twice.
 extra["mavenDependencyWhitelist"] = emptyList<String>()
 dependencies {
     compileOnlyApi("io.smallrye.classfile:jdk-classfile-backport:26")
@@ -67,12 +65,6 @@ dependencies {
         exclude(group = "com.google.guava", module = "guava")
         exclude(group = "it.unimi.dsi", module = "fastutil")
     }
-}
-
-// Downstream projects need optics on their compile classpath because misc now
-// exposes HKT/optics types, while the runtime copy is supplied by JarJar.
-tasks.withType<GenerateModuleMetadata>().configureEach {
-    enabled = true
 }
 
 configureJarJarFilenameNormalization()
