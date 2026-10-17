@@ -1,3 +1,4 @@
+import cc.sighs.gradle.configureMavenDependencies
 import cc.sighs.gradle.ModuleDependenciesExtension
 import cc.sighs.gradle.configureStandardArtifactMetadata
 
@@ -110,24 +111,6 @@ configureStandardArtifactMetadata(
     javaVersion = javaVersion
 )
 
-// Extract text from a POM node's child element, handling namespace prefixes
-fun childText(node: groovy.util.Node, name: String): String {
-    for (child in node.children()) {
-        if (child is groovy.util.Node) {
-            val cn = child.name().toString()
-            if (cn.endsWith("}$name") || cn == name) {
-                val v = child.value()
-                return when (v) {
-                    is String -> v.trim()
-                    is Iterable<*> -> v.joinToString("")
-                    else -> v?.toString()?.trim() ?: ""
-                }
-            }
-        }
-    }
-    return ""
-}
-
 // Maven dependency whitelist for POM filtering. Empty means that no external
 // dependencies are published; explicit moduleDependencies are added separately.
 extra["mavenDependencyWhitelist"] = emptyList<String>()
@@ -137,78 +120,8 @@ publishing {
         register<MavenPublication>("mavenJava") {
             artifactId = base.archivesName.get()
             from(components["java"])
-
             pom.withXml {
-                val xml = asNode()
-                val depsNode = xml.children().filterIsInstance<groovy.util.Node>()
-                    .find { it.name().toString().endsWith("}dependencies") || it.name().toString() == "dependencies" }
-                    ?: (xml.appendNode("dependencies") as groovy.util.Node)
-
-                // 1) Keep only explicitly whitelisted external dependencies.
-                @Suppress("UNCHECKED_CAST")
-                val raw = project.extra.properties["mavenDependencyWhitelist"]
-                val whitelist = (raw as? Iterable<*>)?.map { it.toString().trim() }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
-                fun match(g: String, a: String) =
-                    whitelist.contains(g) || whitelist.contains(a) || whitelist.contains("$g:$a")
-
-                val toRemove = depsNode.children().filterIsInstance<groovy.util.Node>()
-                    .filterNot { match(childText(it, "groupId"), childText(it, "artifactId")) }
-                toRemove.forEach { depsNode.remove(it) }
-
-                val declared = linkedMapOf<String, Triple<String, String, String>>()
-                for ((cfgName, scope) in listOf(
-                    "api" to "compile", "implementation" to "runtime",
-                    "runtimeOnly" to "runtime", "compileOnly" to "compile"
-                )) {
-                    project.configurations.findByName(cfgName)?.dependencies
-                        ?.withType(org.gradle.api.artifacts.ExternalModuleDependency::class.java)
-                        ?.forEach { dep ->
-                            val g = dep.group?.trim() ?: ""
-                            val a = dep.name?.trim() ?: ""
-                            val v = dep.version?.toString()?.trim() ?: ""
-                            if (g.isEmpty() || a.isEmpty() || v.isEmpty() || !match(g, a)) return@forEach
-                            val key = "$g:$a"
-                            if (!declared.containsKey(key) || scope == "compile") {
-                                declared[key] = Triple(g, a, v)
-                            }
-                        }
-                }
-
-                val existingKeys = depsNode.children().filterIsInstance<groovy.util.Node>()
-                    .map { "${childText(it, "groupId")}:${childText(it, "artifactId")}" }.toSet()
-                for (info in declared.values) {
-                    val key = "${info.first}:${info.second}"
-                    if (!existingKeys.contains(key)) {
-                        depsNode.appendNode("dependency").apply {
-                            appendNode("groupId", info.first)
-                            appendNode("artifactId", info.second)
-                            appendNode("version", info.third)
-                            appendNode("scope", if (key.startsWith("net.fabricmc")) "compile" else "runtime")
-                        }
-                    }
-                }
-
-                // 2) Always add moduleDependencies (no filtering, skip duplicates)
-                val suffix = ModuleDependenciesExtension.getSuffix(project.name)
-                val existingArtifacts = depsNode.children().filterIsInstance<groovy.util.Node>()
-                    .map { "${childText(it, "groupId")}:${childText(it, "artifactId")}" }.toSet()
-                for (dep in ModuleDependenciesExtension.getApiDeps(project)) {
-                    val depProj = project(":modules:$dep:$dep-$suffix")
-                    val depArtifactId = depProj.extensions
-                        .getByType(org.gradle.api.plugins.BasePluginExtension::class.java)
-                        .archivesName.get()
-                    val coord = "${depProj.group}:$depArtifactId"
-                    if (!existingArtifacts.contains(coord)) {
-                        depsNode.appendNode("dependency").apply {
-                            appendNode("groupId", depProj.group)
-                            appendNode("artifactId", depArtifactId)
-                            appendNode("version", depProj.version)
-                            appendNode("scope", "compile")
-                        }
-                    }
-                }
-
-                if (depsNode.children().isEmpty()) xml.remove(depsNode)
+                project.configureMavenDependencies(asNode())
             }
         }
     }

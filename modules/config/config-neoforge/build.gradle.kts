@@ -48,9 +48,6 @@ neoForge {
 
 registerGeneratedResources()
 
-// These libraries are embedded below with JarJar. Do not also publish them as
-// runtime dependencies, otherwise ModLauncher sees both the external JAR and
-// the embedded JAR as separate JPMS modules with the same module name.
 extra["mavenDependencyWhitelist"] = emptyList<String>()
 dependencies {
     compileOnlyApi("de.marhali:json5-java:3.0.0")
@@ -58,14 +55,6 @@ dependencies {
     jarJar("de.marhali:json5-java:3.0.0")
 
     "additionalRuntimeClasspath"("de.marhali:json5-java:3.0.0")
-}
-
-// Gradle Module Metadata can represent compileOnlyApi correctly: downstream
-// projects see compileOnlyApi libraries while compiling OELib's public API,
-// but they are absent from runtimeClasspath because JarJar supplies runtime
-// copies. The Maven POM cannot faithfully express this distinction.
-tasks.withType<GenerateModuleMetadata>().configureEach {
-    enabled = true
 }
 
 configureJarJarFilenameNormalization()

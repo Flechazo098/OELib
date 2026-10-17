@@ -51,6 +51,8 @@ registerGeneratedResources()
 extra["mavenDependencyWhitelist"] = listOf("org.mvel:mvel2")
 dependencies {
     api("org.mvel:mvel2:2.5.0.Final")
+    jarJar("org.mvel:mvel2:2.5.0.Final")
+    "additionalRuntimeClasspath"("org.mvel:mvel2:2.5.0.Final")
 }
 
 configureJarJarFilenameNormalization()
