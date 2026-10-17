@@ -1,16 +1,11 @@
 {
-  "required": true,
-  "minVersion": "0.8",
-  "package": "cc.sighs.oelib.mixin",
-  "refmap": "${mod_id}.refmap.json",
-  "compatibilityLevel": "JAVA_18",
-  "mixins": [],
-  "client": [
-    "GuiRendererMixin"
-  ],
-  "server": [],
-  "injectors": {
-    "defaultRequire": 1
-  }
+    "required": true,
+    "package": "com.mixin",
+    "compatibilityLevel": "JAVA_25",
+    "minVersion": "0.8",
+    "client": [],
+    "mixins": [],
+    "injectors": {
+        "defaultRequire": 1
+    }
 }
-
