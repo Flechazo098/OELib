@@ -15,7 +15,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Objects;
 import java.util.Optional;
 
 @Mixin(value = FabricIconHandler.class, remap = false)
@@ -43,17 +42,34 @@ public abstract class FabricIconHandlerMixin {
             return;
         }
 
-        try (InputStream inputStream = Files.newInputStream(path)) {
-            NativeImage image = NativeImage.read(Objects.requireNonNull(inputStream));
+        try (InputStream inputStream = Files.newInputStream(path);
+             NativeImageLease lease = new NativeImageLease(NativeImage.read(inputStream))) {
+            NativeImage image = lease.image;
             if (image.getHeight() != image.getWidth()) {
-                image.close();
                 return;
             }
             DynamicTexture tex = new DynamicTexture(image);
+            lease.transferred = true;
             cacheModIcon(path, tex);
             cir.setReturnValue(tex);
             OELibMisc.LOGGER.info("[OELib: DynamicIcon] Set icon for {}: {}", modId, selected.get());
         } catch (Throwable ignored) {
+        }
+    }
+
+    private static final class NativeImageLease implements AutoCloseable {
+        private final NativeImage image;
+        private boolean transferred;
+
+        private NativeImageLease(NativeImage image) {
+            this.image = image;
+        }
+
+        @Override
+        public void close() {
+            if (!transferred) {
+                image.close();
+            }
         }
     }
 }
