@@ -2,7 +2,7 @@
     "required": true,
     "minVersion": "0.8",
     "package": "cc.sighs.oelib.config.mixin",
-    "compatibilityLevel": "JAVA_21",
+    "compatibilityLevel": "JAVA_17",
     "refmap": ".refmap.json",
     "mixins": [],
     "client": [],
