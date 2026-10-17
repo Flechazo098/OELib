@@ -1,0 +1,39 @@
+plugins {
+    id("module-loader")
+    id("net.fabricmc.fabric-loom")
+}
+
+val mcVersion: String = property("minecraft_version") as String
+
+extra["mavenDependencyWhitelist"] = listOf("de.marhali:json5-java", "com.electronwill.night-config:toml", "com.electronwill.night-config:core")
+dependencies {
+    minecraft("com.mojang:minecraft:${mcVersion}")
+
+    api("com.electronwill.night-config:toml:3.8.3")
+    api("de.marhali:json5-java:3.0.0")
+
+    include("com.electronwill.night-config:core:3.8.3")
+    include("com.electronwill.night-config:toml:3.8.3")
+    include("de.marhali:json5-java:3.0.0")
+}
+
+loom {
+    val aw = project(":modules:config:config-common").file("src/main/resources/oelib-config.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath = aw
+    }
+    runs {
+        named("client") {
+            client()
+            configName = "Fabric Client - OELibConfig"
+            ideConfigGenerated(true)
+            runDir("run")
+        }
+        named("server") {
+            server()
+            configName = "Fabric Server - OELibConfig"
+            ideConfigGenerated(true)
+            runDir("run")
+        }
+    }
+}

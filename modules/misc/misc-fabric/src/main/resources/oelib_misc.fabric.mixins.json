@@ -1,0 +1,15 @@
+{
+    "required": true,
+    "minVersion": "0.8",
+    "package": "cc.sighs.oelib.misc.fabric.mixin",
+    "compatibilityLevel": "JAVA_25",
+    "plugin": "cc.sighs.oelib.misc.fabric.mixin.MixinPlugin",
+    "mixins": [
+        "FabricIconHandlerMixin"
+    ],
+    "client": [],
+    "server": [],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

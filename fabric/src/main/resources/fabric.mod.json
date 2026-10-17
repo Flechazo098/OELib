@@ -1,44 +1,31 @@
 {
-    "schemaVersion": 1,
-    "id": "${mod_id}",
-    "version": "${version}",
-    "name": "${mod_name}",
-    "description": "${description}",
-    "authors": [
-        "${mod_author}"
-    ],
-    "contact": {
-        "homepage": "https://doc.sighs.cc/",
-        "sources": "https://github.com/Tower-of-Sighs/OELib",
-        "issues": "https://github.com/Tower-of-Sighs/OELib/issues"
-    },
-    "license": "${license}",
-    "icon": "assets/oelib/icon1.png",
-    "environment": "*",
-    "entrypoints": {
-        "main": [
-            "cc.sighs.oelib.fabric.OELibFabric"
-        ],
-        "client": [
-            "cc.sighs.oelib.fabric.OELibFabricClient"
-        ],
-        "modmenu": [
-            "cc.sighs.oelib.fabric.modmenu.OELibModMenu"
-        ]
-    },
-    "mixins": [
-        "${mod_id}.mixins.json",
-        "${mod_id}.fabric.mixins.json"
-    ],
-    "depends": {
-        "fabricloader": ">=${fabric_loader_version}",
-        "fabric-api": "*",
-        "minecraft": "~${minecraft_version}",
-        "java": ">=${java_version}"
-    },
-    "suggests": {
-        "another-mod": "*"
-    },
-    "accessWidener": "oelib.classtweaker"
+  "schemaVersion": 1,
+  "id": "oelib",
+  "version": "${version}",
+  "name": "OELib",
+  "description": "Mafuyu never like you:(",
+  "authors": [
+    "Flechazo"
+  ],
+  "contact": {
+    "homepage": ""
+  },
+  "license": "MIT",
+  "icon": "assets/oelib/icon1.png",
+  "environment": "*",
+  "entrypoints": {
+  },
+  "mixins": [
+    "oelib.mixins.json",
+    "oelib.fabric.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${fabric_loader_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
 }
-  
