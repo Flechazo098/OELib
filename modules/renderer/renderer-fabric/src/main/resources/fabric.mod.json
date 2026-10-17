@@ -16,9 +16,6 @@
     "entrypoints": {
         "main": [
             "cc.sighs.oelib.renderer.fabric.OELibRendererFabric"
-        ],
-        "client": [
-            "cc.sighs.oelib.renderer.fabric.OELibRendererFabricClient"
         ]
     },
     "mixins": [

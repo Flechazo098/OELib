@@ -61,8 +61,6 @@ legacyForge {
 
 registerGeneratedResources()
 
-// Optics and its classfile backend are embedded here. Publishing them as
-// runtime dependencies as well would expose the same JPMS modules twice.
 extra["mavenDependencyWhitelist"] = emptyList<String>()
 dependencies {
     compileOnlyApi("io.smallrye.classfile:jdk-classfile-backport:26")
