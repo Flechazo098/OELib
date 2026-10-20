@@ -19,7 +19,7 @@ neoForge {
 extra["mavenDependencyWhitelist"] = listOf("com.flechazo:optics-java", "io.smallrye.classfile:jdk-classfile-backport")
 dependencies {
     implementation("io.smallrye.classfile:jdk-classfile-backport:26")
-    api("com.flechazo:optics-java:1.0.8-beta") {
+    api("com.flechazo:optics-java:1.0.8-beta-j21") {
         exclude(group = "com.google.guava", module = "guava")
         exclude(group = "it.unimi.dsi", module = "fastutil")
     }

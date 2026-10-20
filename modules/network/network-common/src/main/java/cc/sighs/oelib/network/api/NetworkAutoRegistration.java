@@ -6,6 +6,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Set;
+import java.util.List;
+import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 
@@ -14,6 +18,23 @@ public final class NetworkAutoRegistration {
     private static final Set<Class<? extends INetworkPacket<?>>> REGISTERED_PACKET_CLASSES = ConcurrentHashMap.newKeySet();
     private static final Object REGISTRATION_LOCK = new Object();
     private static volatile boolean collected;
+    private static final List<Consumer<Class<? extends INetworkPacket<?>>>> PACKET_LISTENERS = new CopyOnWriteArrayList<>();
+
+    @Deprecated(since = "0.3.0")
+    public static void addPacketRegistrationListener(Consumer<Class<? extends INetworkPacket<?>>> listener) {
+        Objects.requireNonNull(listener, "listener");
+        Set<Class<? extends INetworkPacket<?>>> existing;
+        synchronized (REGISTRATION_LOCK) {
+            PACKET_LISTENERS.add(listener);
+            existing = collected ? Set.copyOf(REGISTERED_PACKET_CLASSES) : Set.of();
+        }
+        existing.forEach(listener);
+    }
+
+    @Deprecated(since = "0.3.0")
+    public static void removePacketRegistrationListener(Consumer<Class<? extends INetworkPacket<?>>> listener) {
+        PACKET_LISTENERS.remove(listener);
+    }
 
     private NetworkAutoRegistration() {
     }
@@ -27,15 +48,18 @@ public final class NetworkAutoRegistration {
     }
 
     public static Set<Class<? extends INetworkPacket<?>>> findAllAnnotatedPackets() {
-        if (!collected) {
-            synchronized (REGISTRATION_LOCK) {
-                if (!collected) {
-                    collectPackets();
-                    collected = true;
-                }
+        List<Consumer<Class<? extends INetworkPacket<?>>>> listeners = List.of();
+        Set<Class<? extends INetworkPacket<?>>> snapshot;
+        synchronized (REGISTRATION_LOCK) {
+            if (!collected) {
+                collectPackets();
+                collected = true;
+                listeners = List.copyOf(PACKET_LISTENERS);
             }
+            snapshot = Set.copyOf(REGISTERED_PACKET_CLASSES);
         }
-        return Set.copyOf(REGISTERED_PACKET_CLASSES);
+        for (var listener : listeners) snapshot.forEach(listener);
+        return snapshot;
     }
 
     private static void collectPackets() {

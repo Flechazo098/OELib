@@ -60,6 +60,14 @@ public class ConfigUnit<T> {
     private volatile T currentValue;
     private volatile T lastValidValue;
 
+    /** @deprecated Use {@link #of(Class, ConfigCodec, Object)}. */
+    @Deprecated(since = "0.3.0")
+    @SuppressWarnings("unchecked")
+    public static <T> ConfigUnit<T> of(ConfigCodec<T> codec, T defaultValue) {
+        Objects.requireNonNull(defaultValue, "defaultValue");
+        return of((Class<T>) defaultValue.getClass(), codec, defaultValue);
+    }
+
     private ConfigUnit(Class<T> rootClass, ConfigCodec<T> configCodec, T defaultValue) {
         this.rootClass = Objects.requireNonNull(rootClass, "rootClass");
         this.configCodec = configCodec;
@@ -123,7 +131,8 @@ public class ConfigUnit<T> {
      * reload logs the failure and restores the most recently accepted value according to the same
      * ordering as {@link #get()}.
      */
-    void reload() {
+    @Deprecated(since = "0.3.0")
+    public void reload() {
         Try.of(this::load).match(value -> {
             currentValue = value;
             lastValidValue = value;
@@ -142,7 +151,8 @@ public class ConfigUnit<T> {
      * <p>A successfully migrated and decoded value may be rewritten in the configured format. A
      * migration or decoding failure is logged and leaves the source file unchanged.
      */
-    void applyAutoMigrationOnRegister() {
+    @Deprecated(since = "0.3.0")
+    public void applyAutoMigrationOnRegister() {
         ConfigIOUtil.applyAutoMigrationOnRegister(this);
     }
 
@@ -191,7 +201,8 @@ public class ConfigUnit<T> {
      * <p>A validation or write failure is logged and restores the most recently validated and
      * accepted value. That value is not necessarily the most recently persisted value.
      */
-    void save() {
+    @Deprecated(since = "0.3.0")
+    public void save() {
         T value = currentValue != null ? currentValue : defaultValue;
         Try.of(() -> {
             validateValueOrThrow(value);
@@ -250,7 +261,8 @@ public class ConfigUnit<T> {
      *
      * @param value the new value
      */
-    void setValue(T value) {
+    @Deprecated(since = "0.3.0")
+    public void setValue(T value) {
         var old = this.currentValue;
         this.currentValue = value;
         if (Platform.isClient() && configCodec.meta().side() == ConfigSide.SERVER && ConfigManager.isUpdatingFromServer()) {
