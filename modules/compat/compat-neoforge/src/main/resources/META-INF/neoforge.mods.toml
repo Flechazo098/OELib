@@ -1,0 +1,79 @@
+modLoader = "javafml"
+loaderVersion = "${neoforge_loader_version_range}"
+license = "${license}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${version}"
+displayName = "${mod_name}"
+authors = "${mod_author}"
+description = """${description}"""
+[[dependencies.${mod_id}]]
+    modId = "neoforge"
+    type="required"
+    versionRange = "[${neoforge_version},)"
+    ordering = "NONE"
+    side = "BOTH"
+[[dependencies.${mod_id}]]
+    modId = "minecraft"
+    type="required"
+    versionRange = "${minecraft_version_range}"
+    ordering = "NONE"
+    side = "BOTH"
+
+
+[[dependencies.${mod_id}]]
+modId = "oelib_config"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_data"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_event"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_misc"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_network"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_registry"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_renderer"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "oelib_bless"
+type = "required"
+versionRange = "[0.3.0,)"
+ordering = "AFTER"
+side = "BOTH"

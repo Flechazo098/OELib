@@ -16,12 +16,12 @@ dependencies {
     })
 
     api("io.smallrye.classfile:jdk-classfile-backport:26")
-    api("com.flechazo:optics-java:1.0.8-beta") {
+    api("com.flechazo:optics-java:1.0.8-beta-j21") {
         exclude(group = "com.google.guava", module = "guava")
         exclude(group = "it.unimi.dsi", module = "fastutil")
     }
     include("io.smallrye.classfile:jdk-classfile-backport:26")
-    include("com.flechazo:optics-java:1.0.8-beta")
+    include("com.flechazo:optics-java:1.0.8-beta-j21")
 }
 
 loom {
