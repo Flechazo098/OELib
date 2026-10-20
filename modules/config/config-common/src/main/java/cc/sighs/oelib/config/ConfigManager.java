@@ -27,6 +27,14 @@ import java.util.function.Supplier;
  */
 public final class ConfigManager {
 
+    /** @deprecated Use {@link #register(Class, ConfigCodec, Object)}. */
+    @Deprecated(since = "0.3.0")
+    public static <T> ConfigUnit<T> register(ConfigCodec<T> codec, T defaultValue) {
+        ConfigUnit<T> unit = ConfigUnit.of(codec, defaultValue);
+        registerUnit(unit);
+        return unit;
+    }
+
     private static final ThreadLocal<Boolean> UPDATING_FROM_SERVER = ThreadLocal.withInitial(() -> Boolean.FALSE);
 
     /**

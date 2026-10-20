@@ -164,7 +164,7 @@ public class DataManager<T> extends SimplePreparableReloadListener<Map<Identifie
 
         OELibData.LOGGER.debug("Updated client data for {}: {} entries", dataClass.getSimpleName(), data.size());
 
-        NeoForge.EVENT_BUS.post(new DataReloadEvent(dataClass, data.size(), 0));
+        NeoForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, data.size(), 0));
     }
 
     public void syncToPlayer(ServerPlayer player) {
@@ -294,7 +294,7 @@ public class DataManager<T> extends SimplePreparableReloadListener<Map<Identifie
             syncToAllPlayers();
         }
 
-        NeoForge.EVENT_BUS.post(new DataReloadEvent(dataClass, validCount, invalidCount));
+        NeoForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, validCount, invalidCount));
     }
 
     private DataValidator.ValidationResult validateData(T data, Identifier source) {

@@ -18,6 +18,10 @@ import de.marhali.json5.Json5;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.util.List;
+import java.util.Optional;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Central serialization pipeline for encoding and decoding configuration
@@ -341,5 +345,32 @@ public final class ConfigSerializationUtil {
          * @return the encoded string, or an empty value on failure
          */
         <T> Maybe<String> encode(T value, Codec<T> codec, List<ConfigValueMeta> fields, int version);
+    }
+
+    @Deprecated(since = "0.3.0")
+    public static <T> Optional<T> loadFromFile(Path path, ConfigStorageFormat format, Codec<T> codec, T defaultValue) {
+        try {
+            if (!Files.exists(path)) return Optional.of(defaultValue);
+            return parse(Files.readString(path, StandardCharsets.UTF_8), format, codec).result()
+                    .or(() -> Optional.of(defaultValue));
+        } catch (Exception error) {
+            OELibConfig.LOGGER.error("Failed to load config from {}", path, error);
+            return Optional.of(defaultValue);
+        }
+    }
+
+    @Deprecated(since = "0.3.0")
+    public static <T> boolean saveToFile(Path path, T value, ConfigStorageFormat format, Codec<T> codec, List<ConfigValueMeta> fields) {
+        try {
+            var content = encodeToString(value, format, codec, fields);
+            if (content.isEmpty()) return false;
+            var parent = path.getParent();
+            if (parent != null) Files.createDirectories(parent);
+            Files.writeString(path, content.get(), StandardCharsets.UTF_8);
+            return true;
+        } catch (Exception error) {
+            OELibConfig.LOGGER.error("Failed to save config to {}", path, error);
+            return false;
+        }
     }
 }
