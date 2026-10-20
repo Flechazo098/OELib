@@ -38,6 +38,13 @@ java {
 //    withJavadocJar()
 }
 
+if (project.name.endsWith("-forge")) {
+    java.disableAutoTargetJvm()
+    tasks.withType<JavaCompile>().configureEach {
+        options.release.set(17)
+    }
+}
+
 repositories {
     mavenCentral()
     exclusiveContent {

@@ -4,6 +4,21 @@ import net.minecraftforge.eventbus.api.Event;
 
 public class DataReloadEvent extends Event {
 
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public static DataReloadEvent create(Class<?> dataClass, int loadedCount, int invalidCount) {
+        return FactoryHolder.INSTANCE.create(dataClass, loadedCount, invalidCount);
+    }
+
+    @org.jetbrains.annotations.ApiStatus.Internal
+    public interface Factory {
+        DataReloadEvent create(Class<?> dataClass, int loadedCount, int invalidCount);
+    }
+
+    private static final class FactoryHolder {
+        private static final Factory INSTANCE = java.util.ServiceLoader.load(Factory.class)
+                .findFirst().orElse(DataReloadEvent::new);
+    }
+
     private final Class<?> dataClass;
     private final int loadedCount;
     private final int invalidCount;

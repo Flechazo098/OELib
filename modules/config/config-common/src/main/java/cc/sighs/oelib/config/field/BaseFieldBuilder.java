@@ -7,6 +7,8 @@ import com.flechazo.hkt.business.control.ValidatedNel;
 import com.flechazo.hkt.business.util.OptionalOps;
 import com.flechazo.optics.LensGetter;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import net.minecraft.network.chat.Component;
 import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 
@@ -43,6 +45,8 @@ public abstract class BaseFieldBuilder<T, B extends BaseFieldBuilder<T, B>> impl
     protected Consumer<ConfigValueMeta> afterMetaHook;
     /** Whether the field receives an automatically derived tooltip key. */
     protected boolean tooltipEnabled;
+    @Deprecated(since = "0.3.0")
+    protected Component validatorDescription;
 
     /**
      * Creates a field builder for the specified key and codec.
@@ -172,6 +176,9 @@ public abstract class BaseFieldBuilder<T, B extends BaseFieldBuilder<T, B>> impl
      * @throws IllegalStateException if no schema definition is active
      */
     public <O> RecordCodecBuilder<O, T> forGetter(LensGetter<O, T> getter) {
+        if (!ConfigContext.isActive() && ConfigField.CURRENT_FIELDS.get() != null) {
+            return forGetter((Function<O, T>) getter);
+        }
         Objects.requireNonNull(getter);
         if (beforeMetaHook != null) {
             beforeMetaHook.accept(metaBuilder);
@@ -196,6 +203,32 @@ public abstract class BaseFieldBuilder<T, B extends BaseFieldBuilder<T, B>> impl
         if (afterMetaHook != null) {
             afterMetaHook.accept(meta);
         }
+        return field.forGetter(getter);
+    }
+
+    /** @deprecated Use {@link #forGetter(LensGetter)} with {@code ConfigSchema}. */
+    @Deprecated(since = "0.3.0")
+    public <O> RecordCodecBuilder<O, T> forGetter(Function<O, T> getter) {
+        var field = codec.fieldOf(key);
+        if (defaultValue != null) field = field.orElse(defaultValue);
+        return forLegacyGetter(getter, field);
+    }
+
+    @Deprecated(since = "0.3.0")
+    protected <O> RecordCodecBuilder<O, T> forLegacyGetter(Function<O, T> getter, MapCodec<T> field) {
+        Objects.requireNonNull(getter, "getter");
+        if (beforeMetaHook != null) beforeMetaHook.accept(metaBuilder);
+        var configId = ConfigContext.isActive() ? ConfigContext.currentConfigId() : ConfigField.CURRENT_CONFIG_ID.get();
+        if (configId != null) {
+            String autoKey = ConfigFieldMetaUtil.autoTranslationKey(configId, key);
+            metaBuilder.translationKey(autoKey);
+            if (tooltipEnabled) metaBuilder.tooltip(autoKey + ".tooltip");
+        }
+        metaBuilder.valueCodec(codec).defaultValue(defaultValue)
+                .accessor(root -> getter.apply((O) root));
+        var meta = ConfigFieldMetaUtil.qualifyForContext(metaBuilder.build());
+        ConfigField.recordMeta(meta);
+        if (afterMetaHook != null) afterMetaHook.accept(meta);
         return field.forGetter(getter);
     }
 }
