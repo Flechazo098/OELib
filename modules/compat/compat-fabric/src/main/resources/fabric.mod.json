@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "${mod_id}",
+  "version": "${version}",
+  "name": "${mod_name}",
+  "description": "${description}",
+  "license": "${license}",
+  "environment": "*",
+  "depends": {
+    "fabricloader": ">=0.14",
+    "fabric-api": "*",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}",
+    "oelib_config": "*",
+    "oelib_data": "*",
+    "oelib_event": "*",
+    "oelib_misc": "*",
+    "oelib_network": "*",
+    "oelib_registry": "*",
+    "oelib_renderer": "*",
+    "oelib_bless": "*"
+  }
+}

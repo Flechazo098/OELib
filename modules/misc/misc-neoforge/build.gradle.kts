@@ -45,17 +45,17 @@ registerGeneratedResources()
 extra["mavenDependencyWhitelist"] = emptyList<String>()
 dependencies {
     compileOnlyApi("io.smallrye.classfile:jdk-classfile-backport:26")
-    compileOnlyApi("com.flechazo:optics-java:1.0.8-beta") {
+    compileOnlyApi("com.flechazo:optics-java:1.0.8-beta-j21") {
         exclude(group = "com.google.guava", module = "guava")
         exclude(group = "it.unimi.dsi", module = "fastutil")
     }
     jarJar("io.smallrye.classfile:jdk-classfile-backport:26")
-    jarJar("com.flechazo:optics-java:1.0.8-beta") {
+    jarJar("com.flechazo:optics-java:1.0.8-beta-j21") {
         exclude(group = "com.google.guava", module = "guava")
         exclude(group = "it.unimi.dsi", module = "fastutil")
     }
     runtimeOnly("io.smallrye.classfile:jdk-classfile-backport:26")
-    runtimeOnly("com.flechazo:optics-java:1.0.8-beta") {
+    runtimeOnly("com.flechazo:optics-java:1.0.8-beta-j21") {
         exclude(group = "com.google.guava", module = "guava")
         exclude(group = "it.unimi.dsi", module = "fastutil")
     }

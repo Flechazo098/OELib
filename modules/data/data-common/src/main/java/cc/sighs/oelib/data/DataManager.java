@@ -1,6 +1,8 @@
 package cc.sighs.oelib.data;
 
 import cc.sighs.oelib.data.api.DataValidator;
+import cc.sighs.oelib.platform.Platform;
+import net.minecraft.server.MinecraftServer;
 import cc.sighs.oelib.data.spi.IDataManager;
 import net.minecraft.resources.Identifier;
 import org.jetbrains.annotations.ApiStatus;
@@ -17,6 +19,16 @@ public final class DataManager {
         IMPL = ServiceLoader.load(IDataManager.class)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No IDataManager implementation found"));
+    }
+
+    @Deprecated(since = "0.3.0")
+    public static MinecraftServer getServer() {
+        return Platform.getCurrentServer();
+    }
+
+    @Deprecated(since = "0.3.0")
+    public static boolean isModLoaded(String modId) {
+        return Platform.isModLoaded(modId);
     }
 
     private DataManager() {
