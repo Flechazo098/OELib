@@ -134,7 +134,7 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
 
         OELibData.LOGGER.debug("Updated client data for {}: {} entries", dataClass.getSimpleName(), data.size());
 
-        MinecraftForge.EVENT_BUS.post(new DataReloadEvent(dataClass, data.size(), 0));
+        MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, data.size(), 0));
     }
 
     public void syncToPlayer(ServerPlayer player) {
@@ -249,7 +249,7 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
             syncToAllPlayers();
         }
 
-        MinecraftForge.EVENT_BUS.post(new DataReloadEvent(dataClass, validCount, invalidCount));
+        MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, validCount, invalidCount));
     }
 
     protected void buildCache(T data) {

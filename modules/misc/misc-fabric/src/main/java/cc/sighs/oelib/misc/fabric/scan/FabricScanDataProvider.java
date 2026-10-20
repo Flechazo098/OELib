@@ -63,7 +63,7 @@ public final class FabricScanDataProvider implements IScanDataProvider {
         }
 
         int availableProcessors = Runtime.getRuntime().availableProcessors();
-        int threadCount = Math.clamp(availableProcessors - 1, 1, targets.size());
+        int threadCount = Math.max(1, Math.min(availableProcessors - 1, targets.size()));
         ScanAccumulator scanned = scanTargets(targets, threadCount);
 
         OELScanData result = new OELScanData(scanned.classes, scanned.annotations);

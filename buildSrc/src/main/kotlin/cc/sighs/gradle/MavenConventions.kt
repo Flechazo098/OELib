@@ -69,6 +69,7 @@ fun Project.configureMavenDependencies(xml: Node) {
         if (!path.startsWith(":modules:")) {
             configuration.dependencies.withType(ProjectDependency::class.java).forEach { dependency ->
                 if (!dependency.path.startsWith(":modules:")) return@forEach
+                if (dependency.path.startsWith(":modules:compat:")) return@forEach
                 val target = project(dependency.path)
                 add(MavenDependency(
                     target.group.toString(),

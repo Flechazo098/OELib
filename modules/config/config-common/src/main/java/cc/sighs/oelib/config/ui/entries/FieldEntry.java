@@ -91,12 +91,16 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
     }
 
     private void createUiControl(int controlX, int y, JsonElement currentValue) {
-        switch (hint) {
-            case ConfigUiHint.Toggle toggle1 -> createToggleControl(controlX, y, currentValue);
-            case ConfigUiHint.Slider sliderHint -> createSliderControl(controlX, y, currentValue, sliderHint);
-            case ConfigUiHint.Dropdown dropdownHint -> createDropdownControl(controlX, y, currentValue, dropdownHint);
-            case ConfigUiHint.Custom customHint -> createCustomControl(controlX, y, currentValue, customHint);
-            case null, default -> createTextBoxControl(controlX, y, currentValue);
+        if (hint instanceof ConfigUiHint.Toggle) {
+            createToggleControl(controlX, y, currentValue);
+        } else if (hint instanceof ConfigUiHint.Slider sliderHint) {
+            createSliderControl(controlX, y, currentValue, sliderHint);
+        } else if (hint instanceof ConfigUiHint.Dropdown dropdownHint) {
+            createDropdownControl(controlX, y, currentValue, dropdownHint);
+        } else if (hint instanceof ConfigUiHint.Custom customHint) {
+            createCustomControl(controlX, y, currentValue, customHint);
+        } else {
+            createTextBoxControl(controlX, y, currentValue);
         }
     }
 
@@ -157,7 +161,7 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
         if (options.isEmpty()) {
             cur = "";
         } else if (!options.contains(cur)) {
-            cur = options.getFirst();
+            cur = options.get(0);
         }
 
         dropdown = CycleButton.builder(this::optionComponent)
@@ -243,32 +247,26 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
     }
 
     private void updateControlValue(String defaultValueStr, JsonElement defaultValueElement) {
-        switch (hint) {
-            case ConfigUiHint.Toggle toggle1 -> {
-                if (toggle != null && defaultValueElement.isJsonPrimitive()
-                        && defaultValueElement.getAsJsonPrimitive().isBoolean()) {
-                    toggle.selected = defaultValueElement.getAsBoolean();
-                }
+        if (hint instanceof ConfigUiHint.Toggle) {
+            if (toggle != null && defaultValueElement.isJsonPrimitive()
+                    && defaultValueElement.getAsJsonPrimitive().isBoolean()) {
+                toggle.selected = defaultValueElement.getAsBoolean();
             }
-            case ConfigUiHint.Slider sliderHint -> {
-                if (slider != null) {
-                    recreateSliderWithDefaultValue(defaultValueElement, sliderHint);
-                }
+        } else if (hint instanceof ConfigUiHint.Slider sliderHint) {
+            if (slider != null) {
+                recreateSliderWithDefaultValue(defaultValueElement, sliderHint);
             }
-            case ConfigUiHint.Dropdown dropdown1 -> {
-                if (dropdown != null) {
-                    dropdown.setValue(defaultValueStr);
-                }
+        } else if (hint instanceof ConfigUiHint.Dropdown) {
+            if (dropdown != null) {
+                dropdown.setValue(defaultValueStr);
             }
-            case ConfigUiHint.Custom custom -> {
-                if (customHandle != null) {
-                    customHandle.reset(defaultValueElement);
-                }
+        } else if (hint instanceof ConfigUiHint.Custom) {
+            if (customHandle != null) {
+                customHandle.reset(defaultValueElement);
             }
-            case null, default -> {
-                if (textBox != null) {
-                    textBox.setValue(defaultValueStr);
-                }
+        } else {
+            if (textBox != null) {
+                textBox.setValue(defaultValueStr);
             }
         }
     }

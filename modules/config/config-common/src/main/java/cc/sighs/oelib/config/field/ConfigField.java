@@ -6,6 +6,8 @@ import cc.sighs.oelib.config.model.ConfigValueMeta;
 import cc.sighs.oelib.config.ui.ConfigUiHint;
 import cc.sighs.oelib.config.util.ConfigFieldMetaUtil;
 import com.flechazo.optics.LensGetter;
+import net.minecraft.resources.ResourceLocation;
+import java.util.function.Function;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -19,6 +21,11 @@ import java.util.*;
  * record component through {@link BaseFieldBuilder#forGetter(LensGetter)}.
  */
 public final class ConfigField {
+    @Deprecated(since = "0.3.0")
+    public static final ThreadLocal<List<ConfigValueMeta>> CURRENT_FIELDS = new ThreadLocal<>();
+    @Deprecated(since = "0.3.0")
+    public static final ThreadLocal<ResourceLocation> CURRENT_CONFIG_ID = new ThreadLocal<>();
+
     private ConfigField() {
     }
 
@@ -29,10 +36,13 @@ public final class ConfigField {
      * @throws IllegalStateException if no {@link ConfigContext} is active
      */
     public static void recordMeta(ConfigValueMeta meta) {
-        if (!ConfigContext.isActive()) {
+        if (ConfigContext.isActive()) {
+            ConfigContext.recordMeta(meta);
+        } else if (CURRENT_FIELDS.get() != null) {
+            CURRENT_FIELDS.get().add(Objects.requireNonNull(meta));
+        } else {
             throw new IllegalStateException("Config field metadata can only be recorded during schema definition.");
         }
-        ConfigContext.recordMeta(meta);
     }
 
     /**
@@ -326,8 +336,18 @@ public final class ConfigField {
             this.elementCodec = elementCodec;
         }
 
+        @Deprecated(since = "0.3.0")
+        public <O> RecordCodecBuilder<O, List<T>> forGetter(Function<O, List<T>> getter) {
+            var field = Codec.list(elementCodec).fieldOf(key);
+            if (defaultValue != null) field = field.orElse(defaultValue);
+            return forLegacyGetter(getter, field);
+        }
+
         @Override
         public <O> RecordCodecBuilder<O, List<T>> forGetter(LensGetter<O, List<T>> getter) {
+            if (!ConfigContext.isActive() && CURRENT_FIELDS.get() != null) {
+                return forGetter((Function<O, List<T>>) getter);
+            }
             var cfgId = ConfigContext.currentConfigId();
             if (cfgId != null) {
                 String autoKey = ConfigFieldMetaUtil.autoTranslationKey(cfgId, key);
@@ -367,8 +387,18 @@ public final class ConfigField {
         }
 
 
+        @Deprecated(since = "0.3.0")
+        public <O> RecordCodecBuilder<O, Map<K, V>> forGetter(Function<O, Map<K, V>> getter) {
+            var field = Codec.unboundedMap(keyCodec, valueCodec).fieldOf(key);
+            if (defaultValue != null) field = field.orElse(defaultValue);
+            return forLegacyGetter(getter, field);
+        }
+
         @Override
         public <O> RecordCodecBuilder<O, Map<K, V>> forGetter(LensGetter<O, Map<K, V>> getter) {
+            if (!ConfigContext.isActive() && CURRENT_FIELDS.get() != null) {
+                return forGetter((Function<O, Map<K, V>>) getter);
+            }
             var cfgId = ConfigContext.currentConfigId();
             if (cfgId != null) {
                 String autoKey = ConfigFieldMetaUtil.autoTranslationKey(cfgId, key);
@@ -427,8 +457,17 @@ public final class ConfigField {
             return super.defaultValue(value);
         }
 
+        @Deprecated(since = "0.3.0")
+        public <O> RecordCodecBuilder<O, Optional<T>> forGetter(Function<O, Optional<T>> getter) {
+            var field = elementCodec.optionalFieldOf(key);
+            return forLegacyGetter(getter, field);
+        }
+
         @Override
         public <O> RecordCodecBuilder<O, Optional<T>> forGetter(LensGetter<O, Optional<T>> getter) {
+            if (!ConfigContext.isActive() && CURRENT_FIELDS.get() != null) {
+                return forGetter((Function<O, Optional<T>>) getter);
+            }
             Objects.requireNonNull(getter);
             if (beforeMetaHook != null) {
                 beforeMetaHook.accept(metaBuilder);
@@ -471,8 +510,18 @@ public final class ConfigField {
             this.defaultValue = sealedCodec.defaultValue();
         }
 
+        @Deprecated(since = "0.3.0")
+        public <O> RecordCodecBuilder<O, T> forGetter(Function<O, T> getter) {
+            metaBuilder.hidden(true);
+            var field = sealedCodec.fieldOf(key).orElse(defaultValue);
+            return forLegacyGetter(getter, field);
+        }
+
         @Override
         public <O> RecordCodecBuilder<O, T> forGetter(LensGetter<O, T> getter) {
+            if (!ConfigContext.isActive() && CURRENT_FIELDS.get() != null) {
+                return forGetter((Function<O, T>) getter);
+            }
             Objects.requireNonNull(getter);
             if (beforeMetaHook != null) {
                 beforeMetaHook.accept(metaBuilder);

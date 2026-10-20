@@ -143,7 +143,7 @@ public final class ConfigFixRegistry {
                 }
                 current = applied.get();
             } else if (!fieldSteps.isEmpty()) {
-                nextVersion = fieldSteps.getFirst().migration().toVersion();
+                nextVersion = fieldSteps.get(0).migration().toVersion();
                 for (FieldStep field : fieldSteps) {
                     if (field.migration().toVersion() != nextVersion) {
                         return Either.left(new ConfigFixError(

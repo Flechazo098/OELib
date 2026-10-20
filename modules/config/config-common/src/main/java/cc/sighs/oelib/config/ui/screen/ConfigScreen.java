@@ -729,35 +729,28 @@ public class ConfigScreen extends Screen {
                 int yIt = listWidget.top - listWidget.getScrollOffset();
                 for (AbstractConfigEntry<?> entry : listWidget.children()) {
                     int headerH = 20;
-                    switch (entry) {
-                        case MapEntry me -> {
-                            if (mouseY >= yIt && mouseY <= yIt + headerH) {
-                                if (me.toggleIfHit(mouseX, mouseY)) {
-                                    return true;
-                                }
+                    if (entry instanceof MapEntry me) {
+                        if (mouseY >= yIt && mouseY <= yIt + headerH) {
+                            if (me.toggleIfHit(mouseX, mouseY)) {
+                                return true;
                             }
-                            yIt += me.getItemHeight();
                         }
-                        case ListEntry le -> {
-                            if (mouseY >= yIt && mouseY <= yIt + headerH) {
-                                if (le.toggleIfHit(mouseX, mouseY)) {
-                                    return true;
-                                }
+                    } else if (entry instanceof ListEntry le) {
+                        if (mouseY >= yIt && mouseY <= yIt + headerH) {
+                            if (le.toggleIfHit(mouseX, mouseY)) {
+                                return true;
                             }
-                            yIt += le.getItemHeight();
                         }
-                        case PathGroupEntry ge -> {
-                            if (mouseY >= yIt && mouseY <= yIt + headerH) {
-                                if (ge.toggleIfHit(mouseX, mouseY)) {
-                                    setGroupExpanded(ge.stateKey(), ge.expanded());
-                                    init();
-                                    return true;
-                                }
+                    } else if (entry instanceof PathGroupEntry ge) {
+                        if (mouseY >= yIt && mouseY <= yIt + headerH) {
+                            if (ge.toggleIfHit(mouseX, mouseY)) {
+                                setGroupExpanded(ge.stateKey(), ge.expanded());
+                                init();
+                                return true;
                             }
-                            yIt += ge.getItemHeight();
                         }
-                        default -> yIt += entry.getItemHeight();
                     }
+                    yIt += entry.getItemHeight();
                 }
             }
         }
