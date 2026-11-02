@@ -1,28 +1,37 @@
 package cc.sighs.oelib.data.forge;
 
 import cc.sighs.oelib.data.OELibData;
+import cc.sighs.oelib.data.api.DeferredBatch;
+import cc.sighs.oelib.data.api.DeferredRetryResult;
+import cc.sighs.oelib.data.api.DataDeferredEvent;
+import cc.sighs.oelib.data.api.DataChangedEvent;
+import cc.sighs.oelib.data.util.data.DeferredDataQueue;
+import cc.sighs.oelib.data.util.data.DataLoadPipeline;
+import com.flechazo.hkt.Try;
+import cc.sighs.oelib.event.EventBus;
+import cc.sighs.oelib.event.LogicalSide;
 import cc.sighs.oelib.data.api.DataDriven;
 import cc.sighs.oelib.data.api.DataValidator;
 import cc.sighs.oelib.data.net.DataSyncPacket;
-import cc.sighs.oelib.event.forge.DataReloadEvent;
 import cc.sighs.oelib.data.util.CodecUtils;
+import cc.sighs.oelib.event.forge.DataReloadEvent;
+import cc.sighs.oelib.platform.Platform;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.mojang.serialization.Codec;
-import com.mojang.serialization.JsonOps;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,13 +41,15 @@ import java.util.stream.Collectors;
 public class DataManager<T> extends SimpleJsonResourceReloadListener {
     private static final Gson GSON = new GsonBuilder().setLenient().create();
     private static final Map<Class<?>, DataManager<?>> managers = new ConcurrentHashMap<>();
-    private static boolean serverStarted = false;
     private static final Map<Class<?>, Set<String>> runtimeRegisteredNamespaces = new ConcurrentHashMap<>();
+    private static boolean serverStarted = false;
     private final Class<T> dataClass;
     private final DataDriven annotation;
     private final Codec<T> codec;
     private final Map<ResourceLocation, T> loadedData = new ConcurrentHashMap<>();
     private final Map<ResourceLocation, T> deferredData = new ConcurrentHashMap<>();
+    private final DeferredDataQueue<T> deferred = new DeferredDataQueue<>(loadedData, deferredData,
+            this::validateData, this::checkRetryThread, this::onDeferredCommitted);
     private final Map<String, Set<T>> cache = new ConcurrentHashMap<>();
     private final Map<String, Class<? extends DataValidator<?>>> namespaceValidatorClasses = new ConcurrentHashMap<>();
     private final Map<String, DataValidator<T>> namespaceValidators = new ConcurrentHashMap<>();
@@ -59,9 +70,9 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
     }
 
     public static <T> void registerNamespaceValidator(Class<T> dataClass, String namespace, Class<? extends DataValidator<?>> validatorClass) {
-        DataManager<T> mgr = get(dataClass);
-        if (mgr != null && namespace != null && !namespace.isBlank() && validatorClass != null) {
-            mgr.namespaceValidatorClasses.put(namespace, validatorClass);
+        DataManager<T> manager = get(dataClass);
+        if (manager != null && namespace != null && !namespace.isBlank() && validatorClass != null) {
+            manager.namespaceValidatorClasses.put(namespace, validatorClass);
         }
     }
 
@@ -85,9 +96,32 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
         return (DataManager<T>) managers.get(dataClass);
     }
 
+    public static MinecraftServer getCurrentServer() {
+        return Platform.getCurrentServer();
+    }
+
     private static String getFolder(Class<?> dataClass) {
         DataDriven annotation = dataClass.getAnnotation(DataDriven.class);
         return annotation.folder();
+    }
+
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        serverStarted = true;
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) { endServerSession(); }
+
+    @SubscribeEvent
+    public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            for (DataManager<?> manager : managers.values()) {
+                if (manager.annotation.syncToClient()) {
+                    manager.syncToPlayer(player);
+                }
+            }
+        }
     }
 
     public Map<ResourceLocation, T> getAllData() {
@@ -122,6 +156,15 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
     }
 
     public void updateClientData(Map<ResourceLocation, T> data) {
+        // An integrated server shares this manager with its client; do not overwrite server pending state.
+        if (Platform.getCurrentServer() != null) {
+            var snapshot = getAllData();
+            MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, snapshot.size(), 0));
+            EventBus.post(new DataChangedEvent<>(dataClass, LogicalSide.CLIENT,
+                    DataChangedEvent.Cause.REMOTE_SYNC, snapshot));
+            return;
+        }
+        deferred.invalidate();
         loadedData.clear();
         loadedData.putAll(data);
         clearCache();
@@ -135,27 +178,23 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
         OELibData.LOGGER.debug("Updated client data for {}: {} entries", dataClass.getSimpleName(), data.size());
 
         MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, data.size(), 0));
+        EventBus.post(new DataChangedEvent<>(dataClass, LogicalSide.CLIENT, DataChangedEvent.Cause.REMOTE_SYNC, getAllData()));
     }
 
     public void syncToPlayer(ServerPlayer player) {
-        if (annotation.syncToClient() && (!loadedData.isEmpty() || !deferredData.isEmpty())) {
-            try {
-                Map<ResourceLocation, T> allData = new HashMap<>(loadedData);
-                allData.putAll(deferredData);
-                DataSyncPacket<T> packet = new DataSyncPacket<>(dataClass, allData);
-                packet.sendTo(player);
+        if (player != null && annotation.syncToClient()) {
+            Try.run(() -> {
+                new DataSyncPacket<>(dataClass, getAllData()).sendTo(player);
                 OELibData.LOGGER.debug("Synced {} data to player: {}", dataClass.getSimpleName(), player.getName().getString());
-            } catch (Exception e) {
-                OELibData.LOGGER.error("Failed to sync {} data to player {}", dataClass.getSimpleName(), player.getName().getString(), e);
-            }
+            }).peekFailure(error -> OELibData.LOGGER.error("Failed to sync {} data to player {}",
+                    dataClass.getSimpleName(), player.getName().getString(), error));
         }
     }
-
 
     @Override
     protected void apply(Map<ResourceLocation, JsonElement> object, ResourceManager resourceManager, ProfilerFiller profiler) {
         loadedData.clear();
-        deferredData.clear();
+        deferred.invalidate();
         clearCache();
         Codec<T> currentCodec = CodecUtils.getCodec(dataClass);
 
@@ -171,113 +210,93 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
         OELibData.LOGGER.info("Loading {} data from {} files (namespaces: {})",
                 dataClass.getSimpleName(), filteredObject.size(), allowNamespaces);
 
-        int validCount = 0;
-        int deferredCount = 0;
-        int invalidCount = 0;
-
-        for (Map.Entry<ResourceLocation, JsonElement> entry : filteredObject.entrySet()) {
-            ResourceLocation location = entry.getKey();
-            JsonElement json = entry.getValue();
-
-            try {
-                if (annotation.supportArray() && json.isJsonArray()) {
-                    var jsonArray = json.getAsJsonArray();
-                    for (int i = 0; i < jsonArray.size(); i++) {
-                        JsonElement element = jsonArray.get(i);
-                        ResourceLocation elementLocation = new ResourceLocation(
-                                location.getNamespace(),
-                                location.getPath() + "_" + i
-                        );
-
-                        var result = currentCodec.parse(JsonOps.INSTANCE, element);
-                        if (result.result().isPresent()) {
-                            T data = result.result().get();
-                            var v = getValidatorForNamespace(location.getNamespace());
-                            var vr = v.validate(data, elementLocation);
-                            if (vr.valid()) {
-                                if (vr.deferrable()) {
-                                    deferredData.put(elementLocation, data);
-                                    deferredCount++;
-                                } else {
-                                    loadedData.put(elementLocation, data);
-                                    if (annotation.enableCache()) buildCache(data);
-                                    validCount++;
-                                }
-                            } else {
-                                invalidCount++;
-                                OELibData.LOGGER.warn("Invalid {} data in array[{}] of {}: {}", dataClass.getSimpleName(), i, location, vr.message());
-                            }
-                        } else {
-                            invalidCount++;
-                            OELibData.LOGGER.error("Failed to parse {} data from array[{}] of {}: {}", dataClass.getSimpleName(), i, location, result.error().orElse(null));
-                        }
-                    }
-                } else {
-                    var result = currentCodec.parse(JsonOps.INSTANCE, json);
-                    if (result.result().isPresent()) {
-                        T data = result.result().get();
-                        var v = getValidatorForNamespace(location.getNamespace());
-                        var vr = v.validate(data, location);
-                        if (vr.valid()) {
-                            if (vr.deferrable()) {
-                                deferredData.put(location, data);
-                                deferredCount++;
-                            } else {
-                                loadedData.put(location, data);
-                                if (annotation.enableCache()) buildCache(data);
-                                validCount++;
-                            }
-                        } else {
-                            invalidCount++;
-                            OELibData.LOGGER.warn("Invalid {} data in {}: {}", dataClass.getSimpleName(), location, vr.message());
-                        }
-                    } else {
-                        invalidCount++;
-                        OELibData.LOGGER.error("Failed to parse {} data from {}: {}", dataClass.getSimpleName(), location, result.error().orElse(null));
-                    }
-                }
-            } catch (Exception e) {
-                invalidCount++;
-                OELibData.LOGGER.error("Error loading {} data from {}", dataClass.getSimpleName(), location, e);
-            }
-        }
+        var counts = DataLoadPipeline.load(dataClass, currentCodec, filteredObject, annotation.supportArray(),
+                this::validateData,
+                (source, value) -> {
+                    loadedData.put(source, value);
+                    if (annotation.enableCache()) buildCache(value);
+                },
+                (source, entry) -> deferred.defer(source, entry.data(), entry.reason()));
 
         OELibData.LOGGER.info("Loaded {} valid {} entries, {} deferred entries, {} invalid entries were skipped",
-                validCount, dataClass.getSimpleName(), deferredCount, invalidCount);
+                counts.accepted(), dataClass.getSimpleName(), counts.deferred(), counts.rejected());
 
-        if (annotation.syncToClient() && serverStarted) {
+        MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, counts.accepted(), counts.rejected()));
+        EventBus.post(new DataChangedEvent<>(dataClass, LogicalSide.SERVER, DataChangedEvent.Cause.RELOAD, getAllData()));
+        if (annotation.syncToClient() && serverStarted && Platform.getCurrentServer() != null) {
             syncToAllPlayers();
         }
+        var pendingBatch = deferred.batch();
+        if (!pendingBatch.entries().isEmpty()) {
+            EventBus.post(new DataDeferredEvent<>(dataClass, LogicalSide.SERVER, pendingBatch));
+        }
+    }
 
-        MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, validCount, invalidCount));
+    public DeferredBatch<T> getDeferredBatch() { return deferred.batch(); }
+
+    private void checkRetryThread() {
+        var server = Platform.getCurrentServer();
+        if (server == null || !server.isSameThread()) {
+            throw new IllegalStateException("Retry deferred data on the owning server thread after server initialization");
+        }
+    }
+
+    private void onDeferredCommitted(DeferredRetryResult result) {
+        result.rejected().forEach((source, reason) ->
+                OELibData.LOGGER.warn("Rejected deferred {} at {}: {}", dataClass.getSimpleName(), source, reason));
+        if (result.accepted() > 0) {
+            clearCache();
+            if (annotation.enableCache()) loadedData.values().forEach(this::buildCache);
+            MinecraftForge.EVENT_BUS.post(DataReloadEvent.create(dataClass, loadedData.size(), result.rejected().size()));
+            EventBus.post(new DataChangedEvent<>(dataClass, LogicalSide.SERVER,
+                    DataChangedEvent.Cause.DEFERRED_RESOLVED, getAllData()));
+            if (annotation.syncToClient()) syncToAllPlayers();
+        }
+    }
+
+    private static void endServerSession() {
+        serverStarted = false;
+        for (DataManager<?> manager : managers.values()) {
+            manager.deferred.invalidate();
+            manager.loadedData.clear();
+            manager.clearCache();
+        }
+    }
+
+    private DataValidator.ValidationResult validateData(T data, ResourceLocation source) {
+        var validator = getValidatorForNamespace(source.getNamespace());
+        if (validator instanceof DataValidator.ServerContextAware<T> contextual) {
+            return contextual.validateWithContext(data, source, Platform.getCurrentServer());
+        } else {
+            return validator.validate(data, source);
+        }
     }
 
     protected void buildCache(T data) {
         addToCache("all", data);
     }
 
-    public static MinecraftServer getCurrentServer() {
-        return ServerLifecycleHooks.getCurrentServer();
-    }
-
     @SuppressWarnings("unchecked")
     private DataValidator<T> getValidatorForNamespace(String namespace) {
         if (namespace == null) return defaultValidator;
         return namespaceValidators.computeIfAbsent(namespace, ns -> {
-            Class<? extends DataValidator<?>> cls = namespaceValidatorClasses.get(ns);
-            if (cls == null) return defaultValidator;
-            try {
-                return (DataValidator<T>) cls.getDeclaredConstructor().newInstance();
-            } catch (Exception e) {
-                OELibData.LOGGER.warn("Failed to instantiate validator for namespace '{}', fallback to default", ns, e);
-                return defaultValidator;
-            }
+            Class<? extends DataValidator<?>> type = namespaceValidatorClasses.get(ns);
+            if (type == null) return defaultValidator;
+            return Try.of(() -> (DataValidator<T>) type.getDeclaredConstructor().newInstance())
+                    .peekFailure(error -> OELibData.LOGGER.warn(
+                            "Failed to instantiate validator for namespace '{}', fallback to default", ns, error))
+                    .orElse(defaultValidator);
         });
     }
 
-    @SubscribeEvent
-    public static void onServerStarted(ServerStartedEvent event) {
-        serverStarted = true;
+    private void syncToAllPlayers() {
+        Try.run(() -> {
+            if (Platform.getCurrentServer() != null) {
+                new DataSyncPacket<>(dataClass, getAllData()).sendToAll();
+                OELibData.LOGGER.debug("Synced {} data to all players", dataClass.getSimpleName());
+            }
+        }).peekFailure(error -> OELibData.LOGGER.error(
+                "Failed to sync {} data to all players", dataClass.getSimpleName(), error));
     }
 
     @SuppressWarnings("unchecked")
@@ -285,38 +304,9 @@ public class DataManager<T> extends SimpleJsonResourceReloadListener {
         if (validatorClass == DataValidator.NoValidator.class) {
             return (DataValidator<T>) new DataValidator.NoValidator();
         }
-
-        try {
-            return (DataValidator<T>) validatorClass.getDeclaredConstructor().newInstance();
-        } catch (Exception e) {
-            OELibData.LOGGER.warn("Failed to create validator {}, using no validator", validatorClass.getSimpleName(), e);
-            return (DataValidator<T>) new DataValidator.NoValidator();
-        }
-    }
-
-    @SubscribeEvent
-    public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            for (DataManager<?> manager : managers.values()) {
-                if (manager.annotation.syncToClient()) {
-                    manager.syncToPlayer(player);
-                }
-            }
-        }
-    }
-
-    private void syncToAllPlayers() {
-        try {
-            var server = getCurrentServer();
-            if (server != null && (!loadedData.isEmpty() || !deferredData.isEmpty())) {
-                Map<ResourceLocation, T> allData = new HashMap<>(loadedData);
-                allData.putAll(deferredData);
-                DataSyncPacket<T> packet = new DataSyncPacket<>(dataClass, allData);
-                packet.sendToAll();
-                OELibData.LOGGER.debug("Synced {} data to all players", dataClass.getSimpleName());
-            }
-        } catch (Exception e) {
-            OELibData.LOGGER.error("Failed to sync {} data to all players", dataClass.getSimpleName(), e);
-        }
+        return Try.of(() -> (DataValidator<T>) validatorClass.getDeclaredConstructor().newInstance())
+                .peekFailure(error -> OELibData.LOGGER.warn("Failed to create validator {}, using no validator",
+                        validatorClass.getSimpleName(), error))
+                .orElseGet(() -> (DataValidator<T>) new DataValidator.NoValidator());
     }
 }
