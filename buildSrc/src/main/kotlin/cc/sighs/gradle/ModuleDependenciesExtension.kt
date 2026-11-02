@@ -32,6 +32,7 @@ open class ModuleDependenciesExtension(val project: Project) {
 
     fun annotationProcessor(modulePath: String) {
         val name = normalize(modulePath)
+        addToList("_moduleDepsAnnotationProcessor", name)
         val suffix = getSuffix(project.name)
         val depPath = ":modules:$name:$name-$suffix"
         project.dependencies.add("annotationProcessor", project.dependencies.project(mapOf("path" to depPath)))
@@ -42,6 +43,7 @@ open class ModuleDependenciesExtension(val project: Project) {
             val extra = project.extensions.getByType(ExtraPropertiesExtension::class.java)
             extra["_moduleDepsApi"] = mutableListOf<String>()
             extra["_moduleDepsImpl"] = mutableListOf<String>()
+            extra["_moduleDepsAnnotationProcessor"] = mutableListOf<String>()
         }
 
         @Suppress("UNCHECKED_CAST")
@@ -54,6 +56,12 @@ open class ModuleDependenciesExtension(val project: Project) {
         fun getImplDeps(project: Project): List<String> {
             val extra = project.extensions.getByType(ExtraPropertiesExtension::class.java)
             return (extra["_moduleDepsImpl"] as? List<String>) ?: emptyList()
+        }
+
+        @Suppress("UNCHECKED_CAST")
+        fun getAnnotationProcessorDeps(project: Project): List<String> {
+            val extra = project.extensions.getByType(ExtraPropertiesExtension::class.java)
+            return (extra["_moduleDepsAnnotationProcessor"] as? List<String>) ?: emptyList()
         }
 
         fun getSuffix(projectName: String): String = when {

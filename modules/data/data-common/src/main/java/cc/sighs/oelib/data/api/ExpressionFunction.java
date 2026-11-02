@@ -14,7 +14,7 @@ import java.lang.annotation.Target;
  * and can be used in condition expressions and action expressions within data packs.
  * </p>
  *
- * <h3>Usage Example:</h3>
+ * <h2>Usage Example:</h2>
  * <pre>{@code
  * @ExpressionFunction(value = "isHoldingItem", description = "Checks whether the player is holding the specified item")
  * public static boolean isHoldingItem(String itemId) {

@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
 /**
  * Annotation for marking data-driven types.
  *
- * <h3>Usage Example:</h3>
+ * <h2>Usage Example:</h2>
  * <pre>{@code
  * @DataDriven(
  *     modid = "mymod",
@@ -121,6 +121,7 @@ public @interface DataDriven {
     @ApiStatus.Internal
     @interface ValidatorBinding {
         String namespace();
+
         Class<? extends DataValidator<?>> validator();
     }
 }

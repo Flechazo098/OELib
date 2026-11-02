@@ -3,6 +3,7 @@ package cc.sighs.oelib.data.neoforge;
 import cc.sighs.oelib.data.DataRegistry;
 import cc.sighs.oelib.data.OELibData;
 import cc.sighs.oelib.data.api.DataValidator;
+import cc.sighs.oelib.data.api.DeferredBatch;
 import cc.sighs.oelib.data.spi.IDataManager;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -47,6 +48,13 @@ public final class DataManagerImpl implements IDataManager {
     public <T> Map<ResourceLocation, T> getAllData(Class<T> dataClass) {
         var manager = DataManager.get(dataClass);
         return manager != null ? manager.getAllData() : Map.of();
+    }
+
+    @Override
+    public <T> DeferredBatch<T> getDeferredBatch(Class<T> dataClass) {
+        var manager = DataManager.get(dataClass);
+        if (manager == null) throw new IllegalArgumentException("Unregistered data type: " + dataClass.getName());
+        return manager.getDeferredBatch();
     }
 
     @Override
