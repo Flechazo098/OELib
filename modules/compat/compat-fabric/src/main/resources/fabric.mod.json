@@ -9,7 +9,7 @@
   "depends": {
     "fabricloader": ">=0.14",
     "fabric-api": "*",
-    "minecraft": "${minecraft_version}",
+    "minecraft": ">=${minecraft_version}",
     "java": ">=${java_version}",
     "oelib_config": "*",
     "oelib_data": "*",

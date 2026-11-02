@@ -90,7 +90,7 @@ public class FluidRenderers {
     }
 
     public static FluidRenderAttributes resolveDefaultAttributes(Fluid fluid) {
-        if (fluid == null) {
+        if (fluid == null || fluid == Fluids.EMPTY) {
             return null;
         }
         var minecraft = Minecraft.getInstance();
@@ -103,7 +103,7 @@ public class FluidRenderers {
             return null;
         }
         var sprite = stillMaterial.sprite();
-        if (sprite == null || sprite.atlasLocation() == MissingTextureAtlasSprite.getLocation()) {
+        if (sprite == null || MissingTextureAtlasSprite.getLocation().equals(sprite.contents().name())) {
             return null;
         }
 

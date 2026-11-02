@@ -1,6 +1,7 @@
 import cc.sighs.gradle.CreateModuleTask
 
 plugins {
+    id("me.modmuss50.mod-publish-plugin") version "2.2.1"
     id("net.fabricmc.fabric-loom") version "1.15-SNAPSHOT" apply false
     id("net.neoforged.moddev") version "2.0.141" apply false
 }
@@ -39,4 +40,51 @@ extra["discoveredModules"] = discoveredModules
 val modId: String = property("mod_id") as String
 tasks.register<CreateModuleTask>("createModule") {
     parentModId = modId
+}
+
+val curseforgeReleaseVersion = "${modVersion}-hotfix3"
+
+fun curseforgeArtifact(loader: String, archiveTask: String): Provider<RegularFile> {
+    val archiveName = "oelib-$loader-${property("minecraft_version")}-$modVersion.jar"
+    val releaseName = "oelib-$loader-${property("minecraft_version")}-$curseforgeReleaseVersion.jar"
+    val prepare = tasks.register<Sync>("prepareCurseforge${loader.replaceFirstChar { it.uppercaseChar() }}") {
+        dependsOn(":$loader:$archiveTask")
+        from(project(":$loader").layout.buildDirectory.file("libs/$archiveName"))
+        into(layout.buildDirectory.dir("curseforge/$loader"))
+        rename { releaseName }
+    }
+    return layout.file(prepare.map { it.destinationDir.resolve(releaseName) })
+}
+
+val curseforgeFabricJar = curseforgeArtifact("fabric", "jar")
+val curseforgeNeoforgeJar = curseforgeArtifact("neoforge", "jar")
+
+publishMods {
+    dryRun.set(providers.gradleProperty("curseforgeDryRun").map { it.toBooleanStrict() }.orElse(true))
+    version.set(curseforgeReleaseVersion)
+    type.set(me.modmuss50.mpp.ReleaseType.STABLE)
+    changelog.set("Fixed a bug that prevented MVEL functions from being registered. This may allow Smart Key Prompts to work properly.")
+
+    val curseforgeDefaults = curseforgeOptions {
+        accessToken.set(providers.environmentVariable("CURSEFORGE_TOKEN"))
+        projectId.set("1319210")
+        projectSlug.set("oelib")
+        minecraftVersions.addAll("26.1", "26.1.1", "26.1.2")
+        client.set(true)
+        server.set(true)
+    }
+
+    curseforge("curseforgeFabric") {
+        from(curseforgeDefaults)
+        file.set(curseforgeFabricJar)
+        displayName.set("OELib $curseforgeReleaseVersion-Fabric-26.1")
+        modLoaders.add("fabric")
+    }
+
+    curseforge("curseforgeNeoforge") {
+        from(curseforgeDefaults)
+        file.set(curseforgeNeoforgeJar)
+        displayName.set("OELib $curseforgeReleaseVersion-NeoForge-26.1")
+        modLoaders.add("neoforge")
+    }
 }

@@ -8,6 +8,7 @@ import cc.sighs.oelib.renderer.spi.IFluidRenderers;
 public final class FluidRenderersImpl implements IFluidRenderers {
     @Override
     public FluidRenderAttributes resolve(FluidRef ref) {
+        if (ref == null) return null;
         return FluidRenderers.resolveDefaultAttributes(ref.getFluid());
     }
 }

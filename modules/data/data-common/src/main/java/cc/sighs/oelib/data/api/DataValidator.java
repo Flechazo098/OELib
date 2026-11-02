@@ -54,12 +54,18 @@ public interface DataValidator<T> {
     }
 
     /**
-     * Represents the result of a validation.
+     * Represents the result of validating one data entry.
+     *
+     * @param valid whether the entry is accepted or retained for deferred validation
+     * @param message the failure or deferral reason, or {@code null}
+     * @param deferrable whether an otherwise valid entry requires a later validation attempt
      */
     record ValidationResult(boolean valid, String message, boolean deferrable) {
 
         /**
-         * Creates a successful validation result.
+         * Creates a result accepting the entry as effective data.
+         *
+         * @return a valid result that requires no further validation
          */
         public static ValidationResult success() {
             return new ValidationResult(true, null, false);
@@ -68,20 +74,25 @@ public interface DataValidator<T> {
         /**
          * Creates a failed validation result.
          *
-         * @param message the error message
+         * @param message the failure reason, or {@code null}
+         * @return an invalid result that does not retain the entry for retry
          */
         public static ValidationResult failure(String message) {
             return new ValidationResult(false, message, false);
         }
 
         /**
-         * Creates a deferred validation result.
-         * <p>
-         * Used when validation depends on runtime state (e.g., tag systems).
-         * The data will be loaded but marked for deferred validation.
-         * </p>
+         * Creates a result retaining the entry for a later validation attempt.
          *
-         * @param message the reason for deferral
+         * <p>The entry remains pending until an explicit retry accepts or rejects it,
+         * or a subsequent load or server shutdown discards it. Pending entries are
+         * excluded from effective-data snapshots and client synchronization.
+         * Returning this result does not schedule a retry.
+         *
+         * @param message the deferral reason, or {@code null} for a default reason
+         * @return a valid result marked for deferred validation
+         * @see DataDeferredEvent
+         * @see DeferredBatch
          */
         public static ValidationResult deferred(String message) {
             return new ValidationResult(true, message, true);

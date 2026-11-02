@@ -50,6 +50,11 @@ project.evaluationDependsOn(commonProjectPath)
 val commonProj = project(commonProjectPath)
 val apiDeps = ModuleDependenciesExtension.getApiDeps(commonProj)
 val implDeps = ModuleDependenciesExtension.getImplDeps(commonProj)
+val processorDeps = ModuleDependenciesExtension.getAnnotationProcessorDeps(commonProj)
+for (dep in processorDeps) {
+    project.dependencies.add("annotationProcessor",
+        project.dependencies.project(mapOf("path" to ":modules:$dep:$dep-common")))
+}
 if (apiDeps.isNotEmpty() || implDeps.isNotEmpty()) {
     for (dep in apiDeps) {
         val depPath = ":modules:$dep:$dep-$suffix"

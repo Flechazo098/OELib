@@ -1,6 +1,7 @@
 package cc.sighs.oelib.data.spi;
 
 import cc.sighs.oelib.data.api.DataValidator;
+import cc.sighs.oelib.data.api.DeferredBatch;
 import net.minecraft.resources.Identifier;
 
 import java.util.List;
@@ -15,6 +16,8 @@ public interface IDataManager {
     <T> void registerNamespaceValidator(Class<T> dataClass, String namespace, Class<? extends DataValidator<?>> validatorClass);
 
     <T> Map<Identifier, T> getAllData(Class<T> dataClass);
+
+    <T> DeferredBatch<T> getDeferredBatch(Class<T> dataClass);
 
     <T> T getData(Class<T> dataClass, Identifier location);
 
