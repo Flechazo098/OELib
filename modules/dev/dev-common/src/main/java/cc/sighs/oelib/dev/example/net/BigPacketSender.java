@@ -438,10 +438,10 @@ public class BigPacketSender {
             score -= varPenalty;
             double intervalPenalty = 0.0;
             if (minGcIntervalMs != Double.POSITIVE_INFINITY) {
-                intervalPenalty = Math.min(30.0, Math.max(0.0, 50.0 - minGcIntervalMs) * 0.6);
+                intervalPenalty = Math.clamp((50.0 - minGcIntervalMs) * 0.6, 0.0, 30.0);
             }
             score -= intervalPenalty;
-            double pausePenalty = Math.min(30.0, Math.max(0.0, maxGcPauseMs - 50.0) * 0.5);
+            double pausePenalty = Math.clamp((maxGcPauseMs - 50.0) * 0.5, 0.0, 30.0);
             score -= pausePenalty;
             if (score < 0.0) score = 0.0;
             return score;
