@@ -1,20 +1,25 @@
 package cc.sighs.oelib.config.ui.entries;
 
 import cc.sighs.oelib.config.ui.screen.ConfigScreen;
+import cc.sighs.oelib.config.ui.widget.ExpandAnimation;
 import cc.sighs.oelib.config.util.ConfigGuiUtil;
+import com.flechazo.optics.Fold;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,17 +39,26 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
     private final Component label;
     private final Component tooltip;
     private final JsonArray array;
+    private static final Fold<ListEntry, AbstractWidget> ROWS = Fold.sum(
+            widgetFold(entry -> entry.valueBoxes),
+            widgetFold(entry -> entry.toggleBoxes),
+            widgetFold(entry -> entry.delButtons),
+            widgetFold(entry -> entry.upButtons),
+            widgetFold(entry -> entry.downButtons));
+    private static final Fold<ListEntry, AbstractWidget> WIDGETS = AbstractConfigEntry.<ListEntry>widgetFold(
+            entry -> Arrays.asList(entry.addBtn, entry.resetButton)).plus(ROWS);
+
     private final List<EditBox> valueBoxes = new ArrayList<>();
-    private final List<Checkbox> toggleBoxes = new ArrayList<>();
+    private final List<@Nullable Checkbox> toggleBoxes = new ArrayList<>();
     private final List<Button> delButtons = new ArrayList<>();
     private final List<Button> upButtons = new ArrayList<>();
     private final List<Button> downButtons = new ArrayList<>();
     private boolean created = false;
     private Screen screen;
-    private Button addBtn;
-    private Button resetButton;
+    private @Nullable Button addBtn;
+    private @Nullable Button resetButton;
     private JsonArray defaultArray;
-    private boolean expanded = false;
+    private final ExpandAnimation expansion = new ExpandAnimation(false);
     private int expX, expY, expW, expH;
 
     /**
@@ -70,7 +84,7 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
 
     @Override
     public int getItemHeight() {
-        return expanded ? rowHeight * Math.max(1, array.size() + 1) : rowHeight;
+        return rowHeight + expansion.reveal(rowHeight * array.size());
     }
 
     /**
@@ -96,7 +110,7 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
             updateResetButtonState();
             if (screen instanceof ConfigScreen cs) cs.markDirty();
         }).bounds(resetX - 24, y, 22, 20).build();
-        screen.addRenderableWidget(addBtn);
+        own(screen, addBtn);
 
         resetButton = Button.builder(Component.translatable("config.oelib.reset"), b -> {
             while (!array.isEmpty()) {
@@ -108,7 +122,7 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
             updateResetButtonState();
             if (screen instanceof ConfigScreen cs) cs.markDirty();
         }).bounds(resetX, y, 72, 20).build();
-        screen.addRenderableWidget(resetButton);
+        own(screen, resetButton);
 
         rebuildRows(x, y, resetX);
         updateResetButtonState();
@@ -132,7 +146,7 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
         for (int i = 0; i < array.size(); i++) {
             var el = array.get(i);
             var vb = ConfigGuiUtil.createEditBox(ConfigGuiUtil.jsonToString(el), vx, rowY, vw);
-            screen.addRenderableWidget(vb);
+            own(screen, vb);
 
             Checkbox cb = null;
             if (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isBoolean()) {
@@ -147,7 +161,7 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
                                 if (screen instanceof ConfigScreen cs) cs.markDirty();
                             }
                         }).build();
-                screen.addRenderableWidget(cb);
+                own(screen, cb);
             }
 
             int deleteX = resetX - 21;
@@ -158,9 +172,9 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
             var down = Button.builder(Component.literal("▼"), b -> moveDown(vb)).bounds(downX, rowY, 20, 20).build();
             var del = Button.builder(Component.literal("x"), b -> removeItem(vb)).bounds(deleteX, rowY, 20, 20).build();
 
-            screen.addRenderableWidget(up);
-            screen.addRenderableWidget(down);
-            screen.addRenderableWidget(del);
+            own(screen, up);
+            own(screen, down);
+            own(screen, del);
 
             vb.setResponder(str -> {
                 int idx = valueBoxes.indexOf(vb);
@@ -224,16 +238,8 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
     }
 
     private void clearWidgets() {
-        for (var list : List.of(valueBoxes, delButtons, upButtons, downButtons)) {
-            for (var w : list) {
-                if (w instanceof EditBox eb) {
-                    eb.setVisible(false);
-                    screen.children().remove(eb);
-                } else {
-                    w.visible = false;
-                    screen.children().remove(w);
-                }
-            }
+        for (AbstractWidget widget : ROWS.getAll(this)) {
+            screen.removeWidget(widget);
         }
     }
 
@@ -251,7 +257,7 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
      */
     public boolean toggleIfHit(double mx, double my) {
         if (mx >= expX && mx <= expX + expW && my >= expY && my <= expY + expH) {
-            expanded = !expanded;
+            expansion.toggle();
             return true;
         }
         return false;
@@ -271,14 +277,17 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
         expY = y + 2;
         expW = 12;
         expH = 16;
-        String arrow = expanded ? "▾" : "▸";
-        graphics.text(Minecraft.getInstance().font, arrow, expX + 2, expY + 4, 0xFFFFFFFF);
+        expansion.drawArrow(graphics, Minecraft.getInstance().font, expX + 2, expY + 4, 0xFFFFFFFF);
 
+        int revealedBottom = y + Math.min(getItemHeight(), shownHeight());
+        boolean headerShown = revealedBottom > y;
         if (addBtn != null) {
+            addBtn.visible = headerShown;
             addBtn.setX(addX);
             addBtn.setY(y);
         }
         if (resetButton != null) {
+            resetButton.visible = headerShown;
             resetButton.setX(resetX);
             resetButton.setY(y);
         }
@@ -297,7 +306,8 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
             var del = delButtons.get(i);
             var up = upButtons.get(i);
             var down = downButtons.get(i);
-            boolean visible = expanded && rowY + rowHeight > topBound && rowY <= bottomBound - 20;
+            boolean visible = rowY < revealedBottom
+                    && rowY + rowHeight > topBound && rowY <= bottomBound - 20;
             vb.visible = visible && cb == null;
             if (cb != null) cb.visible = visible;
             del.visible = visible;
@@ -323,9 +333,29 @@ public class ListEntry extends AbstractConfigEntry<JsonArray> {
                 down.setY(rowY);
                 up.setX(upX);
                 up.setY(rowY);
-                rowY += rowHeight;
             }
+            rowY += rowHeight;
         }
+    }
+
+    @Override
+    public boolean overflows() {
+        return expansion.progress() > 0.0 && expansion.progress() < 1.0;
+    }
+
+    @Override
+    public void renderWidgets(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        renderAll(graphics, mouseX, mouseY, delta, addBtn, resetButton);
+        renderAll(graphics, mouseX, mouseY, delta, valueBoxes);
+        renderAll(graphics, mouseX, mouseY, delta, toggleBoxes);
+        renderAll(graphics, mouseX, mouseY, delta, delButtons);
+        renderAll(graphics, mouseX, mouseY, delta, upButtons);
+        renderAll(graphics, mouseX, mouseY, delta, downButtons);
+    }
+
+    @Override
+    public List<? extends AbstractWidget> widgets() {
+        return WIDGETS.getAll(this);
     }
 
     @Override

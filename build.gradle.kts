@@ -42,12 +42,13 @@ tasks.register<CreateModuleTask>("createModule") {
     parentModId = modId
 }
 
-val curseforgeReleaseVersion = "${modVersion}-hotfix3"
+val curseforgeReleaseVersion = modVersion
 
 fun curseforgeArtifact(loader: String, archiveTask: String): Provider<RegularFile> {
     val archiveName = "oelib-$loader-${property("minecraft_version")}-$modVersion.jar"
     val releaseName = "oelib-$loader-${property("minecraft_version")}-$curseforgeReleaseVersion.jar"
     val prepare = tasks.register<Sync>("prepareCurseforge${loader.replaceFirstChar { it.uppercaseChar() }}") {
+        inputs.property("releaseName", releaseName)
         dependsOn(":$loader:$archiveTask")
         from(project(":$loader").layout.buildDirectory.file("libs/$archiveName"))
         into(layout.buildDirectory.dir("curseforge/$loader"))
@@ -63,7 +64,7 @@ publishMods {
     dryRun.set(providers.gradleProperty("curseforgeDryRun").map { it.toBooleanStrict() }.orElse(true))
     version.set(curseforgeReleaseVersion)
     type.set(me.modmuss50.mpp.ReleaseType.STABLE)
-    changelog.set("Fixed a bug that prevented MVEL functions from being registered. This may allow Smart Key Prompts to work properly.")
+    changelog.set(providers.gradleProperty("releaseChangelog").orElse(""))
 
     val curseforgeDefaults = curseforgeOptions {
         accessToken.set(providers.environmentVariable("CURSEFORGE_TOKEN"))

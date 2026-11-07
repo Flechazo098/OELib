@@ -1,19 +1,24 @@
 package cc.sighs.oelib.config.ui.entries;
 
 import cc.sighs.oelib.config.ui.screen.ConfigScreen;
+import cc.sighs.oelib.config.ui.widget.ExpandAnimation;
 import cc.sighs.oelib.config.util.ConfigGuiUtil;
+import com.flechazo.optics.Fold;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Checkbox;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -34,16 +39,24 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
     private final Component label;
     private final Component tooltip;
     private final JsonObject mapObj;
+    private static final Fold<MapEntry, AbstractWidget> ROWS = Fold.sum(
+            widgetFold(entry -> entry.keyBoxes),
+            widgetFold(entry -> entry.valBoxes),
+            widgetFold(entry -> entry.valToggles),
+            widgetFold(entry -> entry.delButtons));
+    private static final Fold<MapEntry, AbstractWidget> WIDGETS = AbstractConfigEntry.<MapEntry>widgetFold(
+            entry -> Arrays.asList(entry.addBtn, entry.resetButton)).plus(ROWS);
+
     private final List<EditBox> keyBoxes = new ArrayList<>();
     private final List<EditBox> valBoxes = new ArrayList<>();
-    private final List<Checkbox> valToggles = new ArrayList<>();
+    private final List<@Nullable Checkbox> valToggles = new ArrayList<>();
     private final List<Button> delButtons = new ArrayList<>();
     private boolean created = false;
     private Screen screen;
-    private Button addBtn;
-    private boolean expanded = false;
+    private @Nullable Button addBtn;
+    private final ExpandAnimation expansion = new ExpandAnimation(false);
     private int expX, expY, expW, expH;
-    private Button resetButton;
+    private @Nullable Button resetButton;
     private JsonObject defaultMap;
     private int headerY;
 
@@ -70,7 +83,7 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
 
     @Override
     public int getItemHeight() {
-        return expanded ? rowHeight * Math.max(1, mapObj.size() + 1) : rowHeight;
+        return rowHeight + expansion.reveal(rowHeight * mapObj.size());
     }
 
     /**
@@ -99,7 +112,7 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
             updateResetButtonState();
             if (screen instanceof ConfigScreen cs) cs.markDirty();
         }).bounds(addX, y, 22, 20).build();
-        screen.addRenderableWidget(addBtn);
+        own(screen, addBtn);
 
         resetButton = Button.builder(Component.translatable("config.oelib.reset"), b -> {
             mapObj.entrySet().clear();
@@ -111,7 +124,7 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
             updateResetButtonState();
             if (screen instanceof ConfigScreen cs) cs.markDirty();
         }).bounds(resetX, y, 72, 20).build();
-        screen.addRenderableWidget(resetButton);
+        own(screen, resetButton);
 
         rebuildRows(x, y, resetX, deleteX);
         updateResetButtonState();
@@ -139,10 +152,10 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
             int half = width / 2 - 6;
 
             var keyBox = ConfigGuiUtil.createEditBox(e.getKey(), contentLeft, rowY, half);
-            screen.addRenderableWidget(keyBox);
+            own(screen, keyBox);
 
             EditBox valBox = ConfigGuiUtil.createEditBox(ConfigGuiUtil.jsonToString(v), contentLeft + half + 12, rowY, half);
-            screen.addRenderableWidget(valBox);
+            own(screen, valBox);
 
             Checkbox valToggle = null;
             if (v != null && v.isJsonPrimitive() && v.getAsJsonPrimitive().isBoolean()) {
@@ -155,7 +168,7 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
                             if (screen instanceof ConfigScreen cs) cs.markDirty();
                         })
                         .build();
-                screen.addRenderableWidget(valToggle);
+                own(screen, valToggle);
             }
 
             var del = Button.builder(Component.literal("x"), b -> {
@@ -165,7 +178,7 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
                 updateResetButtonState();
                 if (screen instanceof ConfigScreen cs) cs.markDirty();
             }).bounds(deleteX, rowY, 20, 20).build();
-            screen.addRenderableWidget(del);
+            own(screen, del);
 
             keyBox.setResponder(newKey -> {
                 if (newKey.equals(e.getKey())) return;
@@ -197,25 +210,8 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
     }
 
     private void clearWidgets() {
-        for (EditBox kb : keyBoxes) {
-            kb.setVisible(false);
-            screen.children().remove(kb);
-        }
-        for (EditBox vb : valBoxes) {
-            if (vb != null) {
-                vb.setVisible(false);
-                screen.children().remove(vb);
-            }
-        }
-        for (Checkbox cb : valToggles) {
-            if (cb != null) {
-                cb.visible = false;
-                screen.children().remove(cb);
-            }
-        }
-        for (Button db : delButtons) {
-            db.visible = false;
-            screen.children().remove(db);
+        for (AbstractWidget widget : ROWS.getAll(this)) {
+            screen.removeWidget(widget);
         }
     }
 
@@ -233,7 +229,7 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
      */
     public boolean toggleIfHit(double mx, double my) {
         if (mx >= expX && mx <= expX + expW && my >= expY && my <= expY + expH) {
-            expanded = !expanded;
+            expansion.toggle();
             return true;
         }
         return false;
@@ -255,16 +251,17 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
         expY = y + 2;
         expW = 12;
         expH = 16;
-        String arrow = expanded ? "▾" : "▸";
-        graphics.text(Minecraft.getInstance().font, arrow, expX + 2, expY + 4, 0xFFFFFFFF);
+        expansion.drawArrow(graphics, Minecraft.getInstance().font, expX + 2, expY + 4, 0xFFFFFFFF);
 
+        int revealedBottom = y + Math.min(getItemHeight(), shownHeight());
+        boolean headerShown = revealedBottom > y;
         if (addBtn != null) {
-            addBtn.visible = expanded;
+            addBtn.visible = expansion.expanded() && headerShown;
             addBtn.setX(addX);
             addBtn.setY(y);
         }
         if (resetButton != null) {
-            resetButton.visible = expanded;
+            resetButton.visible = expansion.expanded() && headerShown;
             resetButton.setX(resetX);
             resetButton.setY(y);
         }
@@ -284,7 +281,8 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
             EditBox vb = valBoxes.get(i);
             Checkbox cb = valToggles.get(i);
             Button del = delButtons.get(i);
-            boolean visible = expanded && rowY + rowHeight > topBound && rowY <= bottomBound - 20;
+            boolean visible = rowY < revealedBottom
+                    && rowY + rowHeight > topBound && rowY <= bottomBound - 20;
             kb.visible = visible;
             if (vb != null) vb.visible = visible && cb == null;
             if (cb != null) cb.visible = visible;
@@ -307,9 +305,28 @@ public class MapEntry extends AbstractConfigEntry<JsonObject> {
                 }
                 del.setX(deleteX);
                 del.setY(rowY);
-                rowY += rowHeight;
             }
+            rowY += rowHeight;
         }
+    }
+
+    @Override
+    public boolean overflows() {
+        return expansion.progress() > 0.0 && expansion.progress() < 1.0;
+    }
+
+    @Override
+    public void renderWidgets(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        renderAll(graphics, mouseX, mouseY, delta, addBtn, resetButton);
+        renderAll(graphics, mouseX, mouseY, delta, keyBoxes);
+        renderAll(graphics, mouseX, mouseY, delta, valBoxes);
+        renderAll(graphics, mouseX, mouseY, delta, valToggles);
+        renderAll(graphics, mouseX, mouseY, delta, delButtons);
+    }
+
+    @Override
+    public List<? extends AbstractWidget> widgets() {
+        return WIDGETS.getAll(this);
     }
 
     @Override

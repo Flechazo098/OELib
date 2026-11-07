@@ -5,6 +5,7 @@ import cc.sighs.oelib.config.ui.ConfigUiHint;
 import cc.sighs.oelib.config.ui.ConfigWidgetRegistry;
 import cc.sighs.oelib.config.ui.screen.ConfigScreen;
 import cc.sighs.oelib.config.util.ConfigGuiUtil;
+import com.flechazo.optics.Fold;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
@@ -13,7 +14,9 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.*;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import org.jetbrains.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -27,6 +30,9 @@ import java.util.Optional;
  * A reset button next to each field reverts it to the default value.
  */
 public class FieldEntry extends AbstractConfigEntry<Object> {
+    private static final Fold<FieldEntry, AbstractWidget> WIDGETS = AbstractConfigEntry.widgetFold(
+            entry -> Arrays.asList(entry.toggle, entry.textBox, entry.slider, entry.dropdown, entry.customWidget, entry.resetButton));
+
     private final ConfigValueMeta meta;
     private final JsonObject working;
     private final int labelWidth;
@@ -36,11 +42,11 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
     private final Component tooltip;
     private final ConfigUiHint hint;
     private boolean created = false;
-    private Checkbox toggle;
-    private EditBox textBox;
-    private AbstractSliderButton slider;
-    private CycleButton<String> dropdown;
-    private AbstractWidget customWidget;
+    private @Nullable Checkbox toggle;
+    private @Nullable EditBox textBox;
+    private @Nullable AbstractSliderButton slider;
+    private @Nullable CycleButton<String> dropdown;
+    private @Nullable AbstractWidget customWidget;
     private ConfigWidgetRegistry.CustomWidgetHandle customHandle;
     private Button resetButton;
     private JsonElement defaultValueElement;
@@ -124,7 +130,7 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
                 .build();
         toggle.setPosition(controlX - 8, y);
         toggle.setWidth(20);
-        screen.addRenderableWidget(toggle);
+        own(screen, toggle);
     }
 
     private void createSliderControl(int controlX, int y, JsonElement currentValue, ConfigUiHint.Slider sliderHint) {
@@ -134,7 +140,7 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
         double cur = getDoubleValue(currentValue, min);
 
         slider = createSlider(controlX, y, controlWidth, min, max, step, cur);
-        screen.addRenderableWidget(slider);
+        own(screen, slider);
     }
 
     private AbstractSliderButton createSlider(int x, int y, int width,
@@ -180,7 +186,7 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
                                 cs.onFieldChanged(meta.key());
                             }
                         });
-        screen.addRenderableWidget(dropdown);
+        own(screen, dropdown);
     }
 
     private void createCustomControl(int controlX, int y, JsonElement currentValue, ConfigUiHint.Custom customHint) {
@@ -211,12 +217,12 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
             return;
         }
         customWidget = customHandle.widget();
-        screen.addRenderableWidget(customWidget);
+        own(screen, customWidget);
     }
 
     private void createTextBoxControl(int controlX, int y, JsonElement currentValue) {
         textBox = ConfigGuiUtil.createEditBox(ConfigGuiUtil.jsonToString(currentValue), controlX, y, controlWidth);
-        screen.addRenderableWidget(textBox);
+        own(screen, textBox);
 
         textBox.setResponder(str -> {
             var currentEl = ConfigGuiUtil.getPath(working, meta.key());
@@ -237,7 +243,7 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
         resetButton = Button.builder(Component.translatable("config.oelib.reset"),
                         b -> resetToDefault())
                 .bounds(resetX, y, 72, 20).build();
-        screen.addRenderableWidget(resetButton);
+        own(screen, resetButton);
     }
 
     private void resetToDefault() {
@@ -292,11 +298,11 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
         int sy = slider.getY();
         int sw = slider.getWidth();
 
-        screen.children().remove(slider);
+        screen.removeWidget(slider);
         slider.visible = false;
 
         slider = createSlider(sx, sy, sw, min, max, step, defaultValue);
-        screen.addRenderableWidget(slider);
+        own(screen, slider);
     }
 
     @Override
@@ -310,7 +316,7 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
         int reservedLabelWidth = Math.max(this.labelWidth, labelTextWidth + 12);
         int dynamicControlX = x + reservedLabelWidth;
         int availableWidth = Math.max(60, resetX - 8 - dynamicControlX);
-        int dynamicControlWidth = Math.max(100, Math.min(this.controlWidth, availableWidth));
+        int dynamicControlWidth = Math.clamp(this.controlWidth, 100, Math.max(100, availableWidth));
 
         updateControlPositions(dynamicControlX, y, dynamicControlWidth, resetX);
         if (isHovered && tooltip != null && screen instanceof ConfigScreen cs) {
@@ -318,9 +324,9 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
         }
     }
     private void updateControlPositions(int controlX, int y, int controlWidth, int resetX) {
-        boolean rowVisible = true;
+        boolean rowVisible = shownHeight() > 0;
         if (screen instanceof ConfigScreen cs) {
-            rowVisible = y + rowHeight > cs.getContentTop() && y < cs.getContentBottom() - 20;
+            rowVisible &= y + rowHeight > cs.getContentTop() && y < cs.getContentBottom() - 20;
         }
 
         if (toggle != null) {
@@ -358,6 +364,17 @@ public class FieldEntry extends AbstractConfigEntry<Object> {
             resetButton.setY(y);
         }
     }
+    @Override
+    public List<? extends AbstractWidget> widgets() {
+        return WIDGETS.getAll(this);
+    }
+
+    @Override
+    public void renderWidgets(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float delta) {
+        renderAll(graphics, mouseX, mouseY, delta, toggle, textBox, slider);
+        renderAll(graphics, mouseX, mouseY, delta, dropdown, customWidget, resetButton);
+    }
+
     @Override
     public Component getFieldName() {
         return label;

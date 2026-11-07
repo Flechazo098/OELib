@@ -17,6 +17,7 @@ import com.google.gson.JsonObject;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.ConfirmScreen;
@@ -61,8 +62,10 @@ public class ConfigScreen extends Screen {
     private final int contentTop = 36;
     private final int rowHeight = 24;
     private final Scroller refScroller = new Scroller();
-    private final Scroller sideSlider = new Scroller();
+    private final SlideTween sideSlider = new SlideTween();
     private final List<ConfigCtx> contexts = new ArrayList<>();
+    private final Map<ConfigUnit<?>, Object> seenUnitValues = new IdentityHashMap<>();
+    private final Set<Identifier> staleConfigs = new HashSet<>();
     private final Map<AbstractConfigEntry<?>, JsonObject> entryDefaults = new HashMap<>();
     private final JsonObject working;
     private boolean dirty;
@@ -128,7 +131,16 @@ public class ConfigScreen extends Screen {
     }
 
     private int getSideSliderPosition() {
-        return 14 + sideSlider.currentInt();
+        return 14 + (int) Math.floor(sideSlider.value());
+    }
+
+    private double sideSliderFraction() {
+        return snapToPixel(sideSlider.value() - Math.floor(sideSlider.value()));
+    }
+
+    private double snapToPixel(double value) {
+        double scale = Minecraft.getInstance().getWindow().getGuiScale();
+        return Math.round(value * scale) / scale;
     }
 
     private int sidebarWidth() {
@@ -184,8 +196,12 @@ public class ConfigScreen extends Screen {
             initialScroll = Math.max(listWidget.getScrollOffset(), listWidget.getScrollTargetOffset());
         }
         Map<Identifier, JsonObject> preservedWorking = snapshotWorkingByConfig();
+        Set<Identifier> refreshed = Set.copyOf(staleConfigs);
+        refreshed.forEach(preservedWorking::remove);
+        staleConfigs.clear();
         Map<Identifier, Map<String, JsonElement>> preservedConditionalStash = snapshotConditionalStashByConfig();
         contexts.clear();
+        seenUnitValues.clear();
         int sidebar = sidebarWidth();
         int labelWidth = 160;
         int left = sidebar + 16;
@@ -227,7 +243,7 @@ public class ConfigScreen extends Screen {
             var optUnit = ConfigManager.get(id);
             if (optUnit.isEmpty()) continue;
             var u = ConfigGuiUtil.castUnit(optUnit.get());
-            ConfigLifecycle.reload(u);
+            if (!refreshed.contains(id)) ConfigLifecycle.reload(u);
             var c = u.codec();
             var preserved = preservedWorking.get(id);
             var preservedStash = preservedConditionalStash.get(id);
@@ -242,6 +258,7 @@ public class ConfigScreen extends Screen {
                     : deepCopyStash(conditionalFieldStash.get(id));
             conditionalFieldStash.put(id, stash);
             contexts.add(new ConfigCtx(id, u, c, flds, workingJson, defaultsJson, stash));
+            seenUnitValues.put(u, u.get());
             items.add(new CategoryTextEntry(Component.translatable("config." + id.getNamespace() + "." + id.getPath() + ".title"), Component.empty()));
             items.add(new DividerEntry());
             items.add(new EmptyEntry(5));
@@ -293,6 +310,38 @@ public class ConfigScreen extends Screen {
         }
     }
 
+    private void renderReferences(GuiGraphicsExtractor gui, int mouseX, int mouseY, int refX, int refY, int refAreaTop, int refAreaBottom, int refWidth, int itemHeight) {
+        for (FieldRef ref : references) {
+            if (refY + itemHeight >= refAreaTop && refY <= refAreaBottom) {
+                int color = 0xFFFFFFFF;
+                if (mouseX >= refX && mouseX <= refX + refWidth && mouseY >= refY && mouseY <= refY + itemHeight) {
+                    color = 0xFFFFD37F;
+                }
+                gui.text(this.font, ref.label().getVisualOrderText(), refX + 2, refY, color);
+            }
+            refY += itemHeight;
+        }
+    }
+
+    public <W extends AbstractWidget> W addEntryWidget(W widget) {
+        return addWidget(widget);
+    }
+
+    private List<AbstractWidget> maskClippedWidgets(double mouseY) {
+        List<AbstractWidget> masked = new ArrayList<>();
+        if (listWidget == null) return masked;
+        for (AbstractConfigEntry<?> entry : listWidget.children()) {
+            if (!entry.clipping() || (mouseY >= entry.clipTop() && mouseY < entry.clipBottom())) continue;
+            for (AbstractWidget widget : entry.widgets()) {
+                if (widget.visible) {
+                    widget.visible = false;
+                    masked.add(widget);
+                }
+            }
+        }
+        return masked;
+    }
+
     @Override
     public void extractRenderState(GuiGraphicsExtractor gui, int mouseX, int mouseY, float partialTick) {
         if (needsRefreshFromUnits()) {
@@ -302,7 +351,10 @@ public class ConfigScreen extends Screen {
         mouseXLast = -1;
         mouseYLast = -1;
         refScroller.update(partialTick);
-        sideSlider.update(partialTick);
+        sideSlider.update();
+        if (listWidget != null) {
+            listWidget.updateScroll();
+        }
         extractTransparentBackground(gui);
         int sidebar = sidebarWidth();
         int contentLeft = sidebar;
@@ -330,17 +382,10 @@ public class ConfigScreen extends Screen {
             int refWidth = sidebarContentWidth() - 8;
             int itemHeight = this.font.lineHeight + 6;
             int scroll = refScroller.currentInt();
-            int refY = refAreaTop - scroll;
-            for (FieldRef ref : references) {
-                if (refY + itemHeight >= refAreaTop && refY <= refAreaBottom) {
-                    int color = 0xFFFFFFFF;
-                    if (mouseX >= refX && mouseX <= refX + refWidth && mouseY >= refY && mouseY <= refY + itemHeight) {
-                        color = 0xFFFFD37F;
-                    }
-                    gui.text(this.font, ref.label().getVisualOrderText(), refX + 2, refY, color);
-                }
-                refY += itemHeight;
-            }
+            gui.pose().pushMatrix();
+            gui.pose().translate(0, (float) -snapToPixel(refScroller.fraction()));
+            renderReferences(gui, mouseX, mouseY, refX, refAreaTop - scroll, refAreaTop, refAreaBottom, refWidth, itemHeight);
+            gui.pose().popMatrix();
             if (refScroller.hasScroll()) {
                 int barAreaHeight = refAreaBottom - refAreaTop;
                 if (barAreaHeight > 0) {
@@ -369,10 +414,13 @@ public class ConfigScreen extends Screen {
         }
 
         gui.enableScissor(0, headerBottom, this.width, bottomBarTop);
+        gui.pose().pushMatrix();
+        gui.pose().translate((float) sideSliderFraction(), listWidget == null ? 0 : (float) -snapToPixel(listWidget.getScrollFraction()));
         if (listWidget != null) {
             listWidget.render(gui, mouseX, mouseY, partialTick);
         }
         super.extractRenderState(gui, mouseX, mouseY, partialTick);
+        gui.pose().popMatrix();
         gui.disableScissor();
 
         if (saveButton != null) {
@@ -546,43 +594,86 @@ public class ConfigScreen extends Screen {
 
     private boolean needsRefreshFromUnits() {
         if (dirty) return false;
-        try {
-            for (ConfigCtx ctx : contexts) {
-                var fresh = ConfigGuiUtil.encodeToJsonObject(ctx.codec.codec(), ctx.unit.get());
-                if (!Objects.equals(fresh.toString(), ctx.working.toString())) {
-                    return true;
-                }
+        for (ConfigCtx ctx : contexts) {
+            Object current = ctx.unit.get();
+            if (seenUnitValues.put(ctx.unit, current) == current) continue;
+            try {
+                if (!ConfigGuiUtil.encodeToJsonObject(ctx.codec.codec(), current).equals(ctx.working)) staleConfigs.add(ctx.id);
+            } catch (Throwable ignored) {
             }
-        } catch (Throwable ignored) {
         }
-        return false;
+        return !staleConfigs.isEmpty();
     }
 
     private record FieldRef(ConfigValueMeta meta, Component label, int topY) {
     }
 
+    private static final class SlideTween {
+        private static final long DURATION_NANOS = 220_000_000L;
+
+        private double from;
+        private double to;
+        private double current;
+        private long start;
+        private int max;
+
+        void setMaxScroll(int max) {
+            this.max = Math.max(0, max);
+            double clamped = clamp(to);
+            if (clamped != to) retarget(clamped);
+        }
+
+        void offset(double delta) {
+            double next = clamp(to + delta);
+            if (next != to) retarget(next);
+        }
+
+        void update() {
+            current = sample(System.nanoTime());
+        }
+
+        double value() {
+            return current;
+        }
+
+        private void retarget(double next) {
+            long now = System.nanoTime();
+            from = sample(now);
+            to = next;
+            start = now;
+        }
+
+        private double sample(long now) {
+            double t = (now - start) / (double) DURATION_NANOS;
+            if (t >= 1.0) return to;
+            t = Math.max(0.0, t);
+            double eased = t < 0.5 ? 4.0 * t * t * t : 1.0 - Math.pow(2.0 - 2.0 * t, 3.0) / 2.0;
+            return from + (to - from) * eased;
+        }
+
+        private double clamp(double v) {
+            return Math.clamp(v, 0, max);
+        }
+    }
+
     private static final class Scroller {
-        private static final double SMOOTH_SPEED = 16.0;
-        private static final double SNAP_EPSILON = 0.35;
+        private static final double OMEGA = 22.0;
+        private static final double SNAP_EPSILON = 0.01;
+        private static final double SNAP_VELOCITY = 0.5;
 
         private double value;
+        private double velocity;
         private double target;
         private int max;
         private long lastUpdateNanos = System.nanoTime();
 
         void setMaxScroll(int max) {
             this.max = Math.max(0, max);
-            if (this.target > this.max) {
-                this.target = this.max;
-            }
-            if (this.value > this.max) {
-                this.value = this.max;
-            }
-            if (this.target < 0) {
-                this.target = 0;
-            }
-            if (this.value < 0) {
-                this.value = 0;
+            this.target = clamp(this.target);
+            double clamped = clamp(this.value);
+            if (clamped != this.value) {
+                this.value = clamped;
+                this.velocity = 0.0;
             }
         }
 
@@ -597,20 +688,29 @@ public class ConfigScreen extends Screen {
             if (dt <= 0.0) {
                 return;
             }
-
-            double diff = target - value;
-            if (Math.abs(diff) < SNAP_EPSILON) {
+            dt = Math.min(dt, 0.25);
+            double d = value - target;
+            double c = velocity + OMEGA * d;
+            double e = Math.exp(-OMEGA * dt);
+            value = target + (d + c * dt) * e;
+            velocity = (c - OMEGA * (d + c * dt)) * e;
+            if (Math.abs(value - target) < SNAP_EPSILON && Math.abs(velocity) < SNAP_VELOCITY) {
                 value = target;
-                return;
+                velocity = 0.0;
             }
-
-            double alpha = 1.0 - Math.exp(-SMOOTH_SPEED * Math.min(dt, 0.05));
-            value += diff * alpha;
-            value = clamp(value);
+            double clamped = clamp(value);
+            if (clamped != value) {
+                value = clamped;
+                velocity = 0.0;
+            }
         }
 
         int currentInt() {
-            return (int) Math.round(value);
+            return (int) Math.floor(value);
+        }
+
+        double fraction() {
+            return value - Math.floor(value);
         }
 
         boolean hasScroll() {
@@ -618,13 +718,7 @@ public class ConfigScreen extends Screen {
         }
 
         private double clamp(double v) {
-            if (v < 0) {
-                return 0;
-            }
-            if (v > max) {
-                return max;
-            }
-            return v;
+            return Math.clamp(v, 0, max);
         }
     }
 
@@ -695,14 +789,15 @@ public class ConfigScreen extends Screen {
                     if (mouseX >= refX && mouseX <= sliderX && mouseY >= refY && mouseY <= refY + h) {
                         var id = modConfig;
                         int offset = 0;
-                        for (AbstractConfigEntry<?> entry : listWidget.children()) {
-                            if (entry instanceof CategoryTextEntry cte) {
+                        var entries = listWidget.children();
+                        for (int i = 0; i < entries.size(); i++) {
+                            if (entries.get(i) instanceof CategoryTextEntry cte) {
                                 if (cte.getFieldName().getString().equals(Component.translatable("config." + id.getNamespace() + "." + id.getPath() + ".title").getString())) {
                                     listWidget.scrollTo(offset, true);
                                     break;
                                 }
                             }
-                            offset += entry.getItemHeight();
+                            offset += listWidget.shownHeight(i);
                         }
                         return true;
                     }
@@ -711,38 +806,43 @@ public class ConfigScreen extends Screen {
             }
             if (listWidget != null && mouseX >= sliderX && mouseX <= this.width && mouseY >= contentTop && mouseY <= this.height - 32) {
                 int yIt = listWidget.top - listWidget.getScrollOffset();
-                for (AbstractConfigEntry<?> entry : listWidget.children()) {
+                var entries = listWidget.children();
+                for (int i = 0; i < entries.size(); i++) {
                     int headerH = 20;
-                    if (entry instanceof MapEntry me) {
-                        if (mouseY >= yIt && mouseY <= yIt + headerH) {
-                            if (me.toggleIfHit(mouseX, mouseY)) {
+                    int shown = listWidget.shownHeight(i);
+                    boolean onHeader = shown >= headerH && mouseY >= yIt && mouseY <= yIt + headerH;
+                    switch (entries.get(i)) {
+                        case MapEntry me -> {
+                            if (onHeader && me.toggleIfHit(mouseX, mouseY)) {
                                 return true;
                             }
                         }
-                        yIt += me.getItemHeight();
-                    } else if (entry instanceof ListEntry le) {
-                        if (mouseY >= yIt && mouseY <= yIt + headerH) {
-                            if (le.toggleIfHit(mouseX, mouseY)) {
+                        case ListEntry le -> {
+                            if (onHeader && le.toggleIfHit(mouseX, mouseY)) {
                                 return true;
                             }
                         }
-                        yIt += le.getItemHeight();
-                    } else if (entry instanceof PathGroupEntry ge) {
-                        if (mouseY >= yIt && mouseY <= yIt + headerH) {
-                            if (ge.toggleIfHit(mouseX, mouseY)) {
+                        case PathGroupEntry ge -> {
+                            if (onHeader && ge.toggleIfHit(mouseX, mouseY)) {
                                 setGroupExpanded(ge.stateKey(), ge.expanded());
-                                init();
                                 return true;
                             }
                         }
-                        yIt += ge.getItemHeight();
-                    } else {
-                        yIt += entry.getItemHeight();
+                        default -> {
+                        }
                     }
+                    yIt += shown;
                 }
             }
         }
-        return super.mouseClicked(event, doubleClick);
+        List<AbstractWidget> masked = maskClippedWidgets(mouseY);
+        try {
+            return super.mouseClicked(event, doubleClick);
+        } finally {
+            for (AbstractWidget widget : masked) {
+                widget.visible = true;
+            }
+        }
     }
 
     private Map<Identifier, JsonObject> snapshotWorkingByConfig() {
@@ -793,29 +893,26 @@ public class ConfigScreen extends Screen {
         for (int idx = 0; idx < visible.size(); idx++) {
             ConfigValueMeta meta = visible.get(idx);
             String[] parts = meta.key().split("\\.");
-            boolean ancestorsExpanded = true;
             StringBuilder pathBuilder = new StringBuilder();
+            String enclosing = null;
             for (int depth = 0; depth < parts.length - 1; depth++) {
                 if (depth > 0) {
                     pathBuilder.append('.');
                 }
                 pathBuilder.append(parts[depth]);
                 String groupPath = pathBuilder.toString();
+                String stateKey = idToGroupStateKey(configId, groupPath);
                 if (emittedGroups.add(groupPath)) {
-                    String stateKey = idToGroupStateKey(configId, groupPath);
                     boolean expanded = isGroupExpanded(stateKey);
                     String translationKey = "config." + configId.getNamespace() + "." + configId.getPath() + "." + groupPath;
-                    items.add(new PathGroupEntry(stateKey, groupPath, Component.translatable(translationKey), depth, expanded));
+                    PathGroupEntry group = new PathGroupEntry(stateKey, groupPath, Component.translatable(translationKey), depth, expanded);
+                    group.setGroupKey(enclosing);
+                    items.add(group);
                 }
-                ancestorsExpanded = ancestorsExpanded && isGroupExpanded(idToGroupStateKey(configId, groupPath));
-                if (!ancestorsExpanded) {
-                    break;
-                }
-            }
-            if (!ancestorsExpanded) {
-                continue;
+                enclosing = stateKey;
             }
 
+            int firstOwnEntry = items.size();
             if (parts.length > 1) {
                 String parentPath = parentPathOf(meta.key());
                 int parentDepth = depthOfPath(parentPath);
@@ -836,6 +933,9 @@ public class ConfigScreen extends Screen {
                     addDivider(items, parentDepth);
                     items.add(new EmptyEntry(NESTED_OUTER_GAP));
                 }
+            }
+            for (int i = firstOwnEntry; i < items.size(); i++) {
+                items.get(i).setGroupKey(enclosing);
             }
         }
     }

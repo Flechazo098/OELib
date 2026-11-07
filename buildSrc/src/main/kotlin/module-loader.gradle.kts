@@ -96,31 +96,46 @@ if (apiDeps.isNotEmpty() || implDeps.isNotEmpty()) {
     project.extra["_moduleDepsApi"] = apiDeps
     project.extra["_moduleDepsImpl"] = implDeps
 
-    // Forward deps from dependency modules (config-name -> current-module config)
-    val forwardBuffer = mutableListOf<Pair<String, String>>()
-    for (dep in apiDeps + implDeps) {
-        val depPath = ":modules:$dep:$dep-$suffix"
-        val depProj = try { project(depPath) } catch (_: Exception) { continue }
-        fun collect(srcConfig: String, dstConfig: String = srcConfig) {
-            depProj.configurations.findByName(srcConfig)?.dependencies
-                ?.withType(org.gradle.api.artifacts.ExternalModuleDependency::class.java)
-                ?.forEach { ed ->
-                    val g = ed.group ?: return@forEach; val a = ed.name ?: return@forEach; val v = ed.version ?: return@forEach
-                    forwardBuffer.add(dstConfig to "$g:$a:$v")
-                }
-        }
-        if (suffix == "fabric") {
-            collect("api", "api"); collect("api", "api")
-        }
-        // NeoForge: project deps are already fully transitive, no forwarding needed
-    }
-    if (forwardBuffer.isNotEmpty()) {
-        project.afterEvaluate {
-            for ((cfg, notation) in forwardBuffer) {
-                if (project.configurations.findByName(cfg) != null) {
-                    project.dependencies.add(cfg, notation)
+    if (suffix == "fabric") {
+        project.pluginManager.withPlugin("net.fabricmc.fabric-loom") {
+            for (dep in (apiDeps + implDeps).distinct()) {
+                val depProj = project(":modules:$dep:$dep-$suffix")
+                val forwardedConfigurations = mapOf(
+                    "api" to if (dep in apiDeps) "api" else "implementation",
+                    "implementation" to "runtimeOnly",
+                    "runtimeOnly" to "runtimeOnly"
+                )
+                depProj.configurations.matching { it.name in forwardedConfigurations }.all {
+                    val destination = forwardedConfigurations.getValue(name)
+                    dependencies.withType(org.gradle.api.artifacts.ExternalModuleDependency::class.java).all {
+                        project.dependencies.add(destination, copy())
+                    }
                 }
             }
+        }
+    }
+}
+
+if (suffix == "fabric") {
+    val moduleClosure = linkedSetOf<String>()
+    val pending = ArrayDeque(apiDeps + implDeps)
+    while (pending.isNotEmpty()) {
+        val dep = pending.removeFirst()
+        if (!moduleClosure.add(dep)) continue
+        val depCommon = project.evaluationDependsOn(":modules:$dep:$dep-common")
+        pending.addAll(ModuleDependenciesExtension.getApiDeps(depCommon) + ModuleDependenciesExtension.getImplDeps(depCommon))
+    }
+    project.pluginManager.withPlugin("net.fabricmc.fabric-loom") {
+        val loom = project.extensions.getByName("loom")
+        @Suppress("UNCHECKED_CAST")
+        val mods = loom.javaClass.getMethod("getMods").invoke(loom) as NamedDomainObjectContainer<Any>
+        fun group(owner: Project) {
+            val settings = mods.maybeCreate(owner.name)
+            settings.javaClass.getMethod("sourceSet", String::class.java, Project::class.java).invoke(settings, "main", owner)
+        }
+        group(project)
+        for (dep in moduleClosure) {
+            group(project.evaluationDependsOn(":modules:$dep:$dep-$suffix"))
         }
     }
 }

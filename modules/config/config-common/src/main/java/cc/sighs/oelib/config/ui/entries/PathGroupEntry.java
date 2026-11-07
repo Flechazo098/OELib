@@ -1,5 +1,6 @@
 package cc.sighs.oelib.config.ui.entries;
 
+import cc.sighs.oelib.config.ui.widget.ExpandAnimation;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
@@ -19,7 +20,7 @@ public class PathGroupEntry extends AbstractConfigEntry<Object> {
     private final String groupPath;
     private final Component label;
     private final int level;
-    private boolean expanded;
+    private final ExpandAnimation expansion;
     private int arrowX;
     private int arrowY;
     private int arrowW;
@@ -39,7 +40,7 @@ public class PathGroupEntry extends AbstractConfigEntry<Object> {
         this.groupPath = groupPath;
         this.label = label;
         this.level = level;
-        this.expanded = expanded;
+        this.expansion = new ExpandAnimation(expanded);
     }
 
     /**
@@ -66,7 +67,11 @@ public class PathGroupEntry extends AbstractConfigEntry<Object> {
      * @return {@code true} if expanded
      */
     public boolean expanded() {
-        return expanded;
+        return expansion.expanded();
+    }
+
+    public double progress() {
+        return expansion.progress();
     }
 
     /**
@@ -75,7 +80,7 @@ public class PathGroupEntry extends AbstractConfigEntry<Object> {
      * @param expanded {@code true} to expand, {@code false} to collapse
      */
     public void setExpanded(boolean expanded) {
-        this.expanded = expanded;
+        expansion.set(expanded);
     }
 
     /**
@@ -96,7 +101,7 @@ public class PathGroupEntry extends AbstractConfigEntry<Object> {
      */
     public boolean toggleIfHit(double mouseX, double mouseY) {
         if (mouseX >= arrowX && mouseX <= arrowX + arrowW && mouseY >= arrowY && mouseY <= arrowY + arrowH) {
-            expanded = !expanded;
+            expansion.toggle();
             return true;
         }
         return false;
@@ -116,7 +121,7 @@ public class PathGroupEntry extends AbstractConfigEntry<Object> {
         arrowW = 12;
         arrowH = 16;
 
-        graphics.text(font, expanded ? "▾" : "▸", arrowX + 2, arrowY + 4, 0xFFD0D0D0);
+        expansion.drawArrow(graphics, font, arrowX + 2, arrowY + 4, 0xFFD0D0D0);
         graphics.text(font, label, x + 22 + indent, y + 6, 0xFFD0D0D0);
     }
 
