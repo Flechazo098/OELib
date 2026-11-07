@@ -1,16 +1,22 @@
 package cc.sighs.oelib.config.ui.entries;
 
+import cc.sighs.oelib.config.ui.screen.ConfigScreen;
 import com.flechazo.hkt.Maybe;
+import com.flechazo.optics.Fold;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Common base for entries in the auto-generated configuration screen.
@@ -25,6 +31,91 @@ import java.util.function.Consumer;
 public abstract class AbstractConfigEntry<T> implements GuiEventListener, NarratableEntry {
     @Nullable
     protected Consumer<T> saveCallback;
+    @Nullable
+    private String groupKey;
+    private int shownHeight = -1;
+    private int clipTop;
+    private int clipBottom = Integer.MAX_VALUE;
+    private boolean clipping;
+
+    @Nullable
+    public String groupKey() {
+        return groupKey;
+    }
+
+    public void setGroupKey(@Nullable String groupKey) {
+        this.groupKey = groupKey;
+    }
+
+    public void setShownHeight(int shownHeight) {
+        this.shownHeight = shownHeight;
+    }
+
+    protected int shownHeight() {
+        return shownHeight < 0 ? getItemHeight() : shownHeight;
+    }
+
+    public void setClip(int top, int bottom, boolean clipping) {
+        this.clipTop = top;
+        this.clipBottom = bottom;
+        this.clipping = clipping;
+    }
+
+    public int clipTop() {
+        return clipTop;
+    }
+
+    public int clipBottom() {
+        return clipBottom;
+    }
+
+    public boolean clipping() {
+        return clipping;
+    }
+
+    public boolean overflows() {
+        return false;
+    }
+
+    public List<? extends AbstractWidget> widgets() {
+        return Collections.emptyList();
+    }
+
+    public void renderWidgets(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+    }
+
+    protected static <S> Fold<S, AbstractWidget> widgetFold(Function<? super S, ? extends Iterable<? extends @Nullable AbstractWidget>> getAll) {
+        Function<S, Iterable<AbstractWidget>> present = source -> {
+            List<AbstractWidget> widgets = new ArrayList<>();
+            for (AbstractWidget widget : getAll.apply(source)) {
+                if (widget != null) widgets.add(widget);
+            }
+            return widgets;
+        };
+        return Fold.of(present);
+    }
+
+    protected static void renderAll(GuiGraphics graphics, int mouseX, int mouseY, float delta, List<? extends AbstractWidget> widgets) {
+        for (AbstractWidget widget : widgets) {
+            if (widget != null) widget.render(graphics, mouseX, mouseY, delta);
+        }
+    }
+
+    protected static void renderAll(GuiGraphics graphics, int mouseX, int mouseY, float delta,
+                                    @Nullable AbstractWidget first, @Nullable AbstractWidget second) {
+        if (first != null) first.render(graphics, mouseX, mouseY, delta);
+        if (second != null) second.render(graphics, mouseX, mouseY, delta);
+    }
+
+    protected static void renderAll(GuiGraphics graphics, int mouseX, int mouseY, float delta,
+                                    @Nullable AbstractWidget first, @Nullable AbstractWidget second, @Nullable AbstractWidget third) {
+        renderAll(graphics, mouseX, mouseY, delta, first, second);
+        if (third != null) third.render(graphics, mouseX, mouseY, delta);
+    }
+
+    protected static <W extends AbstractWidget> W own(Screen screen, W widget) {
+        return screen instanceof ConfigScreen configScreen ? configScreen.addEntryWidget(widget) : screen.addRenderableWidget(widget);
+    }
 
     /**
      * Returns the height of this entry in pixels.
